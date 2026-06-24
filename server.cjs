@@ -661,7 +661,7 @@ app.post('/api/auth/register', async (req, res) => {
     const newUser = await db.addUser(username, hashedPassword, color, accent);
 
     const token = jwt.sign({ id: newUser.id, username }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ token, user: { id: newUser.id, username, avatarColor: color, accentColor: accent, customStatus: '' } });
+    res.json({ token, user: { id: newUser.id, username, displayName: newUser.displayName || username, avatarColor: color, accentColor: accent, customStatus: '' } });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -691,6 +691,7 @@ app.post('/api/auth/login', async (req, res) => {
       user: {
         id: user.id,
         username: user.username,
+        displayName: user.displayName || user.username,
         avatarColor: user.avatarColor,
         accentColor: user.accentColor,
         customStatus: user.customStatus
@@ -714,15 +715,10 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
 
 // обновление профиля~~
 app.put('/api/auth/profile', authenticateToken, async (req, res) => {
-  const { username, customStatus, avatarColor, accentColor, avatarUrl } = req.body;
+  const { displayName, customStatus, avatarColor, accentColor, avatarUrl } = req.body;
   
   try {
-    const taken = await db.isUsernameTaken(req.user.id, username);
-    if (taken) {
-      return res.status(400).json({ error: 'это имя пользователя уже занято!' });
-    }
-
-    const updated = await db.updateUserProfile(req.user.id, username, customStatus, avatarColor, accentColor, avatarUrl);
+    const updated = await db.updateUserProfile(req.user.id, displayName, customStatus, avatarColor, accentColor, avatarUrl);
     res.json({ success: true, user: updated });
   } catch (e) {
     res.status(500).json({ error: e.message });
