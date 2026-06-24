@@ -385,6 +385,98 @@ const db = {
     }
   },
 
+  // получить всех пользователей для админки, ня~~
+  adminGetUsers: async () => {
+    if (isPostgres) {
+      const res = await pgPool.query('SELECT id, username, display_name as "displayName", avatar_color as "avatarColor", accent_color as "accentColor", custom_status as "customStatus", avatar_url as "avatarUrl", banner_url as "bannerUrl" FROM users ORDER BY id ASC');
+      return res.rows;
+    } else {
+      const dbData = readDb();
+      return dbData.users.map(u => ({
+        id: u.id,
+        username: u.username,
+        displayName: u.displayName || u.username,
+        avatarColor: u.avatarColor,
+        accentColor: u.accentColor,
+        customStatus: u.customStatus,
+        avatarUrl: u.avatarUrl || '',
+        bannerUrl: u.bannerUrl || ''
+      }));
+    }
+  },
+
+  // удалить пользователя из базы для админки, мяу~~
+  adminDeleteUser: async (targetId) => {
+    // не позволяем удалить самого главного админа с id 11, ушки прижимаем~~
+    if (String(targetId) === '11') {
+      throw new Error('нельзя удалить главного админа! uwu');
+    }
+    
+    if (isPostgres) {
+      // удаляем его из участников серверов, друзей и сообщений перед удалением самого пользователя~~
+      await pgPool.query('DELETE FROM server_members WHERE user_id = $1', [targetId]);
+      await pgPool.query('DELETE FROM friends WHERE user_id = $1 OR friend_id = $1', [targetId]);
+      await pgPool.query('DELETE FROM users WHERE id = $1', [targetId]);
+      return true;
+    } else {
+      const dbData = readDb();
+      const userIndex = dbData.users.findIndex(u => String(u.id) === String(targetId));
+      if (userIndex === -1) return false;
+      
+      // вырезаем из списка пользователей~~
+      dbData.users.splice(userIndex, 1);
+      
+      // чистим друзей~~
+      if (dbData.friends) {
+        dbData.friends = dbData.friends.filter(f => String(f.userId) !== String(targetId) && String(f.friendId) !== String(targetId));
+      }
+      // чистим участников серверов~~
+      if (dbData.servers) {
+        dbData.servers.forEach(s => {
+          if (s.members) {
+            s.members = s.members.filter(m => String(m.id) !== String(targetId));
+          }
+        });
+      }
+      writeDb(dbData);
+      return true;
+    }
+  },
+
+  // получить статистику проекта для админ-панели, няяя~~
+  adminGetStats: async () => {
+    if (isPostgres) {
+      const uRes = await pgPool.query('SELECT COUNT(*) FROM users');
+      const sRes = await pgPool.query('SELECT COUNT(*) FROM servers');
+      const cRes = await pgPool.query('SELECT COUNT(*) FROM channels');
+      const mRes = await pgPool.query('SELECT COUNT(*) FROM messages');
+      return {
+        usersCount: parseInt(uRes.rows[0].count),
+        serversCount: parseInt(sRes.rows[0].count),
+        channelsCount: parseInt(cRes.rows[0].count),
+        messagesCount: parseInt(mRes.rows[0].count)
+      };
+    } else {
+      const dbData = readDb();
+      let channelsCount = 0;
+      let messagesCount = 0;
+      if (dbData.servers) {
+        dbData.servers.forEach(s => {
+          if (s.channels) channelsCount += s.channels.length;
+        });
+      }
+      if (dbData.messages) {
+        messagesCount = dbData.messages.length;
+      }
+      return {
+        usersCount: dbData.users.length,
+        serversCount: dbData.servers ? dbData.servers.length : 0,
+        channelsCount,
+        messagesCount
+      };
+    }
+  },
+
   // Получить сообщения~~
   getMessages: async (channelId) => {
     if (isPostgres) {
@@ -1461,6 +1553,47 @@ app.post('/api/friends/block', authenticateToken, async (req, res) => {
     
     // обновляем у себя список друзей~~
     sendSseToUser(req.user.username, 'friend', { type: 'update' });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- АДМИН-ПАНЕЛЬ (ТОЛЬКО ДЛЯ ID 11) ---
+
+// мидлварь для проверки прав админа~~
+const requireAdmin = (req, res, next) => {
+  if (String(req.user.id) !== '11') {
+    return res.status(403).json({ error: 'доступ запрещен, мяу! вы не администратор >w<' });
+  }
+  next();
+};
+
+// получить список всех пользователей для админки~~
+app.get('/api/admin/users', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const list = await db.adminGetUsers();
+    res.json(list);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// получить статистику проекта~~
+app.get('/api/admin/stats', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const stats = await db.adminGetStats();
+    res.json(stats);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// удалить (забанить) пользователя~~
+app.delete('/api/admin/users/:id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const success = await db.adminDeleteUser(req.params.id);
+    if (!success) return res.status(404).json({ error: 'пользователь не найден!' });
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });

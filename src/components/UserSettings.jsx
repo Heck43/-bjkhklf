@@ -287,6 +287,127 @@ function AppearanceSettingsTab() {
   );
 }
 
+// привееет, это вкладка админ-панели для главного котика с ID 11, ня~~
+function AdminPanelTab() {
+  const { adminUsers, adminStats, fetchAdminUsers, fetchAdminStats, adminDeleteUser, userProfile } = useStore();
+
+  useEffect(() => {
+    fetchAdminUsers();
+    fetchAdminStats();
+  }, []);
+
+  const handleDelete = (userId, username) => {
+    if (confirm(`Вы уверены, что хотите забанить/удалить котика @${username}? 🥺`)) {
+      adminDeleteUser(userId);
+    }
+  };
+
+  return (
+    <div className="settings-tab">
+      <h2 className="settings-tab-title">Панель администратора (ID: 11) 🦊🐾</h2>
+      <p className="settings-tab-subtitle" style={{ marginBottom: 20 }}>
+        Добро пожаловать в центр управления полетами! Здесь можно смотреть общую статистику клона дискорда и банить нарушителей~~
+      </p>
+
+      {/* блоки со статистикой~~ */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 16, marginBottom: 24 }}>
+        <div style={{ backgroundColor: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.05)', borderRadius: 8, padding: 16, textAlign: 'center' }}>
+          <span style={{ fontSize: 10, color: 'var(--text-muted)', display: 'block', textTransform: 'uppercase', fontWeight: 'bold' }}>котиков в системе</span>
+          <span style={{ fontSize: 24, fontWeight: 'bold', color: 'var(--discord-blurple)', display: 'block', marginTop: 8 }}>{adminStats?.usersCount ?? '...'}</span>
+        </div>
+        <div style={{ backgroundColor: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.05)', borderRadius: 8, padding: 16, textAlign: 'center' }}>
+          <span style={{ fontSize: 10, color: 'var(--text-muted)', display: 'block', textTransform: 'uppercase', fontWeight: 'bold' }}>серверов создано</span>
+          <span style={{ fontSize: 24, fontWeight: 'bold', color: 'var(--discord-green)', display: 'block', marginTop: 8 }}>{adminStats?.serversCount ?? '...'}</span>
+        </div>
+        <div style={{ backgroundColor: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.05)', borderRadius: 8, padding: 16, textAlign: 'center' }}>
+          <span style={{ fontSize: 10, color: 'var(--text-muted)', display: 'block', textTransform: 'uppercase', fontWeight: 'bold' }}>активных каналов</span>
+          <span style={{ fontSize: 24, fontWeight: 'bold', color: '#FAA81A', display: 'block', marginTop: 8 }}>{adminStats?.channelsCount ?? '...'}</span>
+        </div>
+        <div style={{ backgroundColor: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.05)', borderRadius: 8, padding: 16, textAlign: 'center' }}>
+          <span style={{ fontSize: 10, color: 'var(--text-muted)', display: 'block', textTransform: 'uppercase', fontWeight: 'bold' }}>отправлено сообщений</span>
+          <span style={{ fontSize: 24, fontWeight: 'bold', color: '#ff8da1', display: 'block', marginTop: 8 }}>{adminStats?.messagesCount ?? '...'}</span>
+        </div>
+      </div>
+
+      {/* список пользователей~~ */}
+      <h3 style={{ fontSize: 15, fontWeight: 'bold', color: '#fff', marginBottom: 12 }}>Список зарегистрированных пользователей</h3>
+      <div style={{ overflowX: 'auto', backgroundColor: 'rgba(0, 0, 0, 0.2)', borderRadius: 8, border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
+          <thead>
+            <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.08)', color: 'var(--text-muted)' }}>
+              <th style={{ padding: 12 }}>ID</th>
+              <th style={{ padding: 12 }}>Пользователь</th>
+              <th style={{ padding: 12 }}>Отображаемое имя</th>
+              <th style={{ padding: 12 }}>Статус</th>
+              <th style={{ padding: 12, textAlign: 'right' }}>Действия</th>
+            </tr>
+          </thead>
+          <tbody>
+            {adminUsers.map(u => {
+              const isMe = String(u.id) === String(userProfile.id);
+              const isTargetAdmin = String(u.id) === '11';
+
+              return (
+                <tr key={u.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)', color: '#dcddde' }}>
+                  <td style={{ padding: 12, fontWeight: 'bold', color: 'var(--text-muted)' }}>{u.id}</td>
+                  <td style={{ padding: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {u.avatarUrl ? (
+                        <img src={u.avatarUrl} alt={u.username} style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover' }} />
+                      ) : (
+                        <div style={{ width: 24, height: 24, borderRadius: '50%', backgroundColor: u.avatarColor || '#72767d', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 'bold', color: '#fff' }}>
+                          {u.username.substring(0, 2)}
+                        </div>
+                      )}
+                      <span>@{u.username}</span>
+                      {isTargetAdmin && (
+                        <span style={{ fontSize: 9, backgroundColor: 'rgba(88, 101, 242, 0.15)', color: 'var(--discord-blurple)', padding: '1px 4px', borderRadius: 4, textTransform: 'uppercase', fontWeight: 'bold' }}>Admin</span>
+                      )}
+                    </div>
+                  </td>
+                  <td style={{ padding: 12 }}>{u.displayName || u.username}</td>
+                  <td style={{ padding: 12, fontStyle: 'italic', color: 'var(--text-muted)' }}>{u.customStatus || '—'}</td>
+                  <td style={{ padding: 12, textAlign: 'right' }}>
+                    {isMe ? (
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>вы сами owo</span>
+                    ) : isTargetAdmin ? (
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>нельзя трогать uwu</span>
+                    ) : (
+                      <button
+                        onClick={() => handleDelete(u.id, u.username)}
+                        style={{
+                          backgroundColor: 'transparent',
+                          border: '1px solid var(--discord-red)',
+                          color: 'var(--discord-red)',
+                          borderRadius: 4,
+                          padding: '4px 8px',
+                          fontSize: 11,
+                          cursor: 'pointer',
+                          transition: 'all 0.2s'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.target.style.backgroundColor = 'var(--discord-red)';
+                          e.target.style.color = '#fff';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.target.style.backgroundColor = 'transparent';
+                          e.target.style.color = 'var(--discord-red)';
+                        }}
+                      >
+                        Забанить
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export default function UserSettings() {
   const { userProfile, updateUserProfile, settingsOpen, setSettingsOpen, logout } = useStore();
   const [activeTab, setActiveTab] = useState('account');
@@ -395,6 +516,16 @@ export default function UserSettings() {
           >
             Внешний вид
           </div>
+
+          {String(userProfile.id) === '11' && (
+            <div 
+              className={`settings-sidebar-item ${activeTab === 'admin' ? 'active' : ''}`}
+              onClick={() => setActiveTab('admin')}
+              style={{ color: '#FAA81A', fontWeight: 'bold' }}
+            >
+              👑 Админ-панель
+            </div>
+          )}
 
           <div style={{ height: 1, backgroundColor: 'rgba(255,255,255,0.06)', margin: '16px 10px' }} />
 
@@ -676,6 +807,10 @@ export default function UserSettings() {
 
             {activeTab === 'appearance' && (
               <AppearanceSettingsTab />
+            )}
+
+            {activeTab === 'admin' && (
+              <AdminPanelTab />
             )}
           </div>
         </div>

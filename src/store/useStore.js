@@ -58,6 +58,10 @@ export const useStore = create((set, get) => ({
   activeCall: null,
   localStream: null,
   remoteStream: null,
+  
+  // админ-панель~~
+  adminUsers: [],
+  adminStats: null,
   voiceStates: {}, // { channelId: [participants] }
   
   // настройки~~
@@ -946,5 +950,36 @@ export const useStore = create((set, get) => ({
         }
       };
     });
+  },
+
+  // методы управления админ-панелью, ня~~
+  fetchAdminUsers: async () => {
+    try {
+      const users = await apiFetch('/api/admin/users');
+      set({ adminUsers: users });
+    } catch (e) {
+      console.error('ошибка загрузки пользователей админки:', e);
+    }
+  },
+
+  fetchAdminStats: async () => {
+    try {
+      const stats = await apiFetch('/api/admin/stats');
+      set({ adminStats: stats });
+    } catch (e) {
+      console.error('ошибка загрузки статистики админки:', e);
+    }
+  },
+
+  adminDeleteUser: async (userId) => {
+    try {
+      await apiFetch(`/api/admin/users/${userId}`, { method: 'DELETE' });
+      set(state => ({
+        adminUsers: state.adminUsers.filter(u => u.id !== userId)
+      }));
+      await get().fetchAdminStats();
+    } catch (e) {
+      alert(e.message);
+    }
   }
 }));
