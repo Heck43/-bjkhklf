@@ -90,7 +90,7 @@ function MainLayout() {
     }
   }, [isAuthenticated, navigate]);
 
-  // автоматическое фоновое обновление данных каждые 2.5 секунды, ня~~
+  // мгновенное обновление данных по протоколу SSE, ууууу~~
   useEffect(() => {
     if (!isAuthenticated) return;
 
@@ -99,70 +99,77 @@ function MainLayout() {
       Notification.requestPermission();
     }
 
-    // локальные переменные для отслеживания изменений~~
-    let prevFriends = [];
-    let prevMessageCounts = {};
+    const token = localStorage.getItem('discord_token');
+    if (!token) return;
 
-    const interval = setInterval(async () => {
+    // подключаем постоянное SSE соединение для мгновенного пуша~~
+    const eventSource = new EventSource(`/api/updates?token=${token}`);
+
+    eventSource.onmessage = (event) => {
+      if (event.data === 'ping') return;
+
       try {
-        await fetchServers();
-        await fetchFriends();
-        
-        const currentFriends = useStore.getState().friends;
+        const { type, data } = JSON.parse(event.data);
         const currentUser = useStore.getState().userProfile;
 
-        // 1. проверка новых заявок в друзья~~
-        currentFriends.forEach(f => {
-          if (f.relation === 'pending_incoming') {
-            const wasPending = prevFriends.some(pf => pf.username === f.username && pf.relation === 'pending_incoming');
-            if (!wasPending && prevFriends.length > 0) {
-              if ('Notification' in window && Notification.permission === 'granted') {
-                new Notification('Новый запрос дружбы! 🌸', {
-                  body: `${f.username} хочет добавить тебя в друзья~~ ня!`,
-                  tag: 'friend_request_' + f.username
-                });
+        if (type === 'message') {
+          const { channelId, message } = data;
+
+          // обновляем сообщения мгновенно в Zustand сторе!
+          useStore.setState((state) => {
+            const channelMessages = state.messages[channelId] || [];
+            // избегаем дубликатов сообщений~~
+            if (channelMessages.some(m => m.id === message.id)) return {};
+            
+            const updated = [...channelMessages, {
+              ...message,
+              isOwn: message.sender === currentUser.username
+            }];
+            return {
+              messages: {
+                ...state.messages,
+                [channelId]: updated
               }
+            };
+          });
+
+          // если сообщение от другого человека и вкладка неактивна — шлем уведомление~~
+          if (message.sender !== currentUser.username) {
+            if ('Notification' in window && Notification.permission === 'granted' && document.hidden) {
+              new Notification(`Новое сообщение от ${message.sender}! 💬`, {
+                body: message.content,
+                tag: 'msg_' + channelId
+              });
             }
           }
-        });
-        prevFriends = currentFriends;
+        } else if (type === 'friend') {
+          // обновляем друзей при любом изменении заявки~~
+          fetchFriends();
 
-        // 2. проверка новых сообщений в активном чате~~
-        const activeCh = useStore.getState().activeChannelId;
-        if (activeCh && activeCh !== 'friends') {
-          let chatKey = activeCh;
-          if (activeCh.startsWith('dm_')) {
-            const dmUser = useStore.getState().activeDmUser;
-            if (dmUser) {
-              chatKey = 'dm_' + [currentUser.username, dmUser.username].sort().join('_');
+          if (data.type === 'request') {
+            if ('Notification' in window && Notification.permission === 'granted') {
+              new Notification('Новый запрос дружбы! 🌸', {
+                body: `${data.from} хочет добавить тебя в друзья~~ ня!`,
+                tag: 'friend_request_' + data.from
+              });
             }
           }
-
-          await useStore.getState().fetchMessages(chatKey);
-
-          const currentMsgs = useStore.getState().messages[chatKey] || [];
-          const lastMsg = currentMsgs[currentMsgs.length - 1];
-
-          if (lastMsg && lastMsg.sender !== currentUser.username) {
-            const prevCount = prevMessageCounts[chatKey] || 0;
-            // показываем уведомление только если количество сообщений увеличилось и вкладка не в фокусе (или всегда)~~
-            if (currentMsgs.length > prevCount && prevCount > 0) {
-              if ('Notification' in window && Notification.permission === 'granted' && document.hidden) {
-                new Notification(`Новое сообщение от ${lastMsg.sender}! 💬`, {
-                  body: lastMsg.content,
-                  tag: 'msg_' + chatKey
-                });
-              }
-            }
-          }
-          prevMessageCounts[chatKey] = currentMsgs.length;
+        } else if (type === 'server' || type === 'channel') {
+          // обновляем список серверов и каналов~~
+          fetchServers();
         }
       } catch (e) {
-        console.error('ошибка при обновлении уведомлений:', e);
+        console.error('ошибка обработки sse обновлений:', e);
       }
-    }, 2500);
+    };
 
-    return () => clearInterval(interval);
+    eventSource.onerror = (err) => {
+      console.error('sse соединение прервалось, переподключение...', err);
+    };
+
+    return () => {
+      eventSource.close();
+    };
   }, [isAuthenticated, fetchServers, fetchFriends]);
 
   useEffect(() => {

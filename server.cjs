@@ -408,6 +408,57 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
+// --- SSE (SERVER-SENT EVENTS) ДЛЯ МГНОВЕННЫХ УВЕДОМЛЕНИЙ И ЧАТА ---
+const sseClients = new Set();
+
+// Отправка SSE события конкретному пользователю~~
+const sendSseToUser = (username, type, data) => {
+  const payload = JSON.stringify({ type, data });
+  for (const client of sseClients) {
+    if (client.username.toLowerCase() === username.toLowerCase()) {
+      client.res.write(`data: ${payload}\n\n`);
+    }
+  }
+};
+
+// Отправка SSE события всем подключенным пользователям~~
+const sendSseToAll = (type, data) => {
+  const payload = JSON.stringify({ type, data });
+  for (const client of sseClients) {
+    client.res.write(`data: ${payload}\n\n`);
+  }
+};
+
+// Эндпоинт для подключения SSE обновлений~~
+app.get('/api/updates', (req, res) => {
+  const token = req.query.token;
+  if (!token) return res.status(401).end();
+
+  jwt.verify(token, JWT_SECRET, (err, decodedUser) => {
+    if (err) return res.status(403).end();
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    const client = { res, userId: decodedUser.id, username: decodedUser.username };
+    sseClients.add(client);
+    console.log(`sse подключение: @${decodedUser.username} (активно: ${sseClients.size})~~ 🌸`);
+
+    // отправляем ping каждые 15 секунд, чтобы держать соединение открытым~~
+    const pingInterval = setInterval(() => {
+      res.write('data: ping\n\n');
+    }, 15000);
+
+    req.on('close', () => {
+      clearInterval(pingInterval);
+      sseClients.delete(client);
+      console.log(`sse отключение: @${decodedUser.username} (активно: ${sseClients.size})~~ 💾`);
+    });
+  });
+});
+
 // --- ЭНДПОИНТЫ СЕРВЕРОВ ---
 app.get('/api/servers', authenticateToken, async (req, res) => {
   try {
@@ -429,6 +480,9 @@ app.post('/api/servers', authenticateToken, async (req, res) => {
     // автоматически создаем дефолтный текстовый канал "general" при создании сервера~~
     const defaultChannel = await db.addChannel(newServer.id, 'general', 'text');
     newServer.channels = [defaultChannel];
+    
+    // оповещаем всех клиентов мгновенно~~
+    sendSseToAll('server', newServer);
     res.json(newServer);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -443,6 +497,9 @@ app.post('/api/channels', authenticateToken, async (req, res) => {
   }
   try {
     const newChannel = await db.addChannel(serverId, name, type);
+    
+    // оповещаем всех клиентов мгновенно~~
+    sendSseToAll('channel', newChannel);
     res.json(newChannel);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -558,6 +615,17 @@ app.post('/api/messages', authenticateToken, async (req, res) => {
   
   try {
     const newMsg = await db.addMessage(channelId, req.user.username, content, timeStr, avatarColor);
+    
+    // мгновенно оповещаем участников по SSE~~
+    if (channelId.startsWith('dm_')) {
+      const parts = channelId.replace('dm_', '').split('_');
+      parts.forEach(username => {
+        sendSseToUser(username, 'message', { channelId, message: newMsg });
+      });
+    } else {
+      sendSseToAll('message', { channelId, message: newMsg });
+    }
+    
     res.json(newMsg);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -592,6 +660,11 @@ app.post('/api/friends/add', authenticateToken, async (req, res) => {
     if (alreadyFriend) return res.status(400).json({ error: 'вы уже отправляли запрос или дружите!' });
 
     await db.addFriendRequest(req.user.id, targetUser.id, targetUser.username, req.user.username);
+    
+    // шлем уведомление цели и обновляем себе список~~
+    sendSseToUser(targetUser.username, 'friend', { type: 'request', from: req.user.username });
+    sendSseToUser(req.user.username, 'friend', { type: 'update' });
+
     res.json({ success: true, message: 'запрос отправлен!' });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -605,6 +678,10 @@ app.post('/api/friends/accept', authenticateToken, async (req, res) => {
     const friendUser = await db.getUserByUsername(friendUsername);
     if (friendUser) {
       await db.acceptFriendRequest(req.user.id, friendUsername, friendUser.id, req.user.username);
+      
+      // шлем обоим событие обновления списка друзей~~
+      sendSseToUser(friendUsername, 'friend', { type: 'accept', from: req.user.username });
+      sendSseToUser(req.user.username, 'friend', { type: 'update' });
     }
     res.json({ success: true });
   } catch (e) {
@@ -619,6 +696,10 @@ app.post('/api/friends/remove', authenticateToken, async (req, res) => {
     const friendUser = await db.getUserByUsername(friendUsername);
     if (friendUser) {
       await db.removeFriend(req.user.id, friendUsername, friendUser.id, req.user.username);
+      
+      // шлем обоим событие обновления списка друзей~~
+      sendSseToUser(friendUsername, 'friend', { type: 'remove', from: req.user.username });
+      sendSseToUser(req.user.username, 'friend', { type: 'update' });
     }
     res.json({ success: true });
   } catch (e) {
@@ -631,6 +712,9 @@ app.post('/api/friends/block', authenticateToken, async (req, res) => {
   const { friendUsername } = req.body;
   try {
     await db.blockFriend(req.user.id, friendUsername);
+    
+    // обновляем у себя список друзей~~
+    sendSseToUser(req.user.username, 'friend', { type: 'update' });
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
