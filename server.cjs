@@ -91,6 +91,9 @@ const db = {
           ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name VARCHAR(50) DEFAULT ''
         `);
         await client.query(`
+          ALTER TABLE users ADD COLUMN IF NOT EXISTS banner_url TEXT DEFAULT ''
+        `);
+        await client.query(`
           CREATE TABLE IF NOT EXISTS servers (
             id VARCHAR(50) PRIMARY KEY,
             name VARCHAR(50) NOT NULL,
@@ -309,12 +312,12 @@ const db = {
       const res = await pgPool.query('SELECT * FROM users WHERE LOWER(username) = LOWER($1)', [username]);
       if (res.rows.length === 0) return null;
       const u = res.rows[0];
-      return { id: u.id, username: u.username, displayName: u.display_name || u.username, password: u.password, avatarColor: u.avatar_color, accentColor: u.accent_color, customStatus: u.custom_status, avatarUrl: u.avatar_url || '' };
+      return { id: u.id, username: u.username, displayName: u.display_name || u.username, password: u.password, avatarColor: u.avatar_color, accentColor: u.accent_color, customStatus: u.custom_status, avatarUrl: u.avatar_url || '', bannerUrl: u.banner_url || '' };
     } else {
       const dbData = readDb();
       const u = dbData.users.find(u => u.username.toLowerCase() === username.toLowerCase());
       if (!u) return null;
-      return { ...u, displayName: u.displayName || u.username, avatarUrl: u.avatarUrl || '' };
+      return { ...u, displayName: u.displayName || u.username, avatarUrl: u.avatarUrl || '', bannerUrl: u.bannerUrl || '' };
     }
   },
 
@@ -323,12 +326,12 @@ const db = {
       const res = await pgPool.query('SELECT * FROM users WHERE id = $1', [id]);
       if (res.rows.length === 0) return null;
       const u = res.rows[0];
-      return { id: u.id, username: u.username, displayName: u.display_name || u.username, password: u.password, avatarColor: u.avatar_color, accentColor: u.accent_color, customStatus: u.custom_status, avatarUrl: u.avatar_url || '' };
+      return { id: u.id, username: u.username, displayName: u.display_name || u.username, password: u.password, avatarColor: u.avatar_color, accentColor: u.accent_color, customStatus: u.custom_status, avatarUrl: u.avatar_url || '', bannerUrl: u.banner_url || '' };
     } else {
       const dbData = readDb();
       const u = dbData.users.find(u => u.id === id);
       if (!u) return null;
-      return { ...u, displayName: u.displayName || u.username, avatarUrl: u.avatarUrl || '' };
+      return { ...u, displayName: u.displayName || u.username, avatarUrl: u.avatarUrl || '', bannerUrl: u.bannerUrl || '' };
     }
   },
 
@@ -340,10 +343,10 @@ const db = {
         [username, password, avatarColor, accentColor]
       );
       const u = res.rows[0];
-      return { id: u.id, username: u.username, displayName: u.display_name || u.username, password: u.password, avatarColor: u.avatar_color, accentColor: u.accent_color, customStatus: u.custom_status, avatarUrl: '' };
+      return { id: u.id, username: u.username, displayName: u.display_name || u.username, password: u.password, avatarColor: u.avatar_color, accentColor: u.accent_color, customStatus: u.custom_status, avatarUrl: '', bannerUrl: '' };
     } else {
       const dbData = readDb();
-      const newUser = { id: dbData.users.length + 1, username, displayName: username, password, avatarColor, accentColor, customStatus: '', avatarUrl: '' };
+      const newUser = { id: dbData.users.length + 1, username, displayName: username, password, avatarColor, accentColor, customStatus: '', avatarUrl: '', bannerUrl: '' };
       dbData.users.push(newUser);
       writeDb(dbData);
       return newUser;
@@ -351,23 +354,23 @@ const db = {
   },
 
   // Обновить профиль~~
-  updateUserProfile: async (id, displayName, customStatus, avatarColor, accentColor, avatarUrl = '') => {
+  updateUserProfile: async (id, displayName, customStatus, avatarColor, accentColor, avatarUrl = '', bannerUrl = '') => {
     if (isPostgres) {
       await pgPool.query(
-        'UPDATE users SET display_name = $1, custom_status = $2, avatar_color = $3, accent_color = $4, avatar_url = $5 WHERE id = $6',
-        [displayName, customStatus, avatarColor, accentColor, avatarUrl, id]
+        'UPDATE users SET display_name = $1, custom_status = $2, avatar_color = $3, accent_color = $4, avatar_url = $5, banner_url = $6 WHERE id = $7',
+        [displayName, customStatus, avatarColor, accentColor, avatarUrl, bannerUrl, id]
       );
       const uRes = await pgPool.query('SELECT * FROM users WHERE id = $1', [id]);
       const u = uRes.rows[0];
-      return { id, username: u.username, displayName: u.display_name || u.username, customStatus, avatarColor, accentColor, avatarUrl };
+      return { id, username: u.username, displayName: u.display_name || u.username, customStatus, avatarColor, accentColor, avatarUrl, bannerUrl: u.banner_url || '' };
     } else {
       const dbData = readDb();
       const userIndex = dbData.users.findIndex(u => u.id === id);
       if (userIndex === -1) return null;
 
-      dbData.users[userIndex] = { ...dbData.users[userIndex], displayName, customStatus, avatarColor, accentColor, avatarUrl };
+      dbData.users[userIndex] = { ...dbData.users[userIndex], displayName, customStatus, avatarColor, accentColor, avatarUrl, bannerUrl };
       writeDb(dbData);
-      return { id, username: dbData.users[userIndex].username, displayName, customStatus, avatarColor, accentColor, avatarUrl };
+      return { id, username: dbData.users[userIndex].username, displayName, customStatus, avatarColor, accentColor, avatarUrl, bannerUrl };
     }
   },
 
@@ -1136,10 +1139,10 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
 
 // обновление профиля~~
 app.put('/api/auth/profile', authenticateToken, async (req, res) => {
-  const { displayName, customStatus, avatarColor, accentColor, avatarUrl } = req.body;
+  const { displayName, customStatus, avatarColor, accentColor, avatarUrl, bannerUrl } = req.body;
   
   try {
-    const updated = await db.updateUserProfile(req.user.id, displayName, customStatus, avatarColor, accentColor, avatarUrl);
+    const updated = await db.updateUserProfile(req.user.id, displayName, customStatus, avatarColor, accentColor, avatarUrl, bannerUrl);
     res.json({ success: true, user: updated });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -1157,7 +1160,8 @@ app.get('/api/users/:username', authenticateToken, async (req, res) => {
       avatarColor: user.avatarColor,
       accentColor: user.accentColor,
       customStatus: user.customStatus,
-      avatarUrl: user.avatarUrl
+      avatarUrl: user.avatarUrl,
+      bannerUrl: user.bannerUrl || ''
     });
   } catch (e) {
     res.status(500).json({ error: e.message });

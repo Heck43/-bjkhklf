@@ -39,10 +39,15 @@ export default function UserProfileModal() {
   return (
     <div className="profile-modal-overlay" onClick={() => setSelectedProfileUser(null)}>
       <div className="profile-card" onClick={(e) => e.stopPropagation()}>
-        {/* цветной баннер на фоне с цветом акцента юзера~~ */}
+        {/* цветной баннер на фоне с цветом акцента юзера или фоточкой~~ */}
         <div 
           className="profile-banner" 
-          style={{ backgroundColor: selectedProfileUser.accentColor || 'var(--discord-blurple)' }}
+          style={{ 
+            backgroundColor: selectedProfileUser.bannerUrl ? 'transparent' : (selectedProfileUser.accentColor || 'var(--discord-blurple)'),
+            backgroundImage: selectedProfileUser.bannerUrl ? `url(${selectedProfileUser.bannerUrl})` : 'none',
+            backgroundSize: 'cover',
+            backgroundPosition: 'center'
+          }}
         >
           <button 
             className="close-modal-btn" 

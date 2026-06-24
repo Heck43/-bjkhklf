@@ -37,7 +37,8 @@ export const useStore = create((set, get) => ({
     avatarColor: '#ff8da1',
     accentColor: '#ff2d55',
     id: null,
-    avatarUrl: ''
+    avatarUrl: '',
+    bannerUrl: ''
   },
 
   selectedProfileUser: null,
@@ -118,7 +119,7 @@ export const useStore = create((set, get) => ({
     set({
       token: null,
       isAuthenticated: false,
-      userProfile: { username: '', customStatus: '', avatarColor: '#ff8da1', accentColor: '#ff2d55', id: null, avatarUrl: '' },
+      userProfile: { username: '', customStatus: '', avatarColor: '#ff8da1', accentColor: '#ff2d55', id: null, avatarUrl: '', bannerUrl: '' },
       friends: [],
       messages: {},
       activeCall: null

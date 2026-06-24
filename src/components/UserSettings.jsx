@@ -20,7 +20,8 @@ const profileSchema = z.object({
     .or(z.literal('')),
   avatarColor: z.string(),
   accentColor: z.string(),
-  avatarUrl: z.string().optional().or(z.literal(''))
+  avatarUrl: z.string().optional().or(z.literal('')),
+  bannerUrl: z.string().optional().or(z.literal(''))
 });
 
 const AVATAR_COLORS = ['#ff8da1', '#5865F2', '#3BA55D', '#FAA81A', '#ED4245', '#9b59b6'];
@@ -303,13 +304,15 @@ export default function UserSettings() {
       customStatus: userProfile.customStatus || '',
       avatarColor: userProfile.avatarColor,
       accentColor: userProfile.accentColor,
-      avatarUrl: userProfile.avatarUrl || ''
+      avatarUrl: userProfile.avatarUrl || '',
+      bannerUrl: userProfile.bannerUrl || ''
     }
   });
 
   const selectedAvatarColor = watch('avatarColor');
   const selectedAccentColor = watch('accentColor');
   const avatarUrlValue = watch('avatarUrl');
+  const bannerUrlValue = watch('bannerUrl');
   const displayNameValue = watch('displayName');
 
   // поддержка закрытия по ESC~~
@@ -333,6 +336,21 @@ export default function UserSettings() {
       const reader = new FileReader();
       reader.onloadend = () => {
         setValue('avatarUrl', reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleBannerFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) {
+        alert("Оййй, файлик слишком большой! Максимум 2MB, ня~~");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setValue('bannerUrl', reader.result);
       };
       reader.readAsDataURL(file);
     }
@@ -533,6 +551,37 @@ export default function UserSettings() {
                           className="btn-secondary"
                           style={{ color: 'var(--discord-red)', padding: '8px 16px', fontSize: 13 }}
                           onClick={() => setValue('avatarUrl', '')}
+                        >
+                          Удалить
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* загрузка баннера~~ */}
+                  <div className="form-group">
+                    <label className="form-label">Загрузить баннер профиля</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>
+                      <input
+                        type="file"
+                        id="banner-upload"
+                        accept="image/*"
+                        onChange={handleBannerFileChange}
+                        style={{ display: 'none' }}
+                      />
+                      <label 
+                        htmlFor="banner-upload"
+                        className="btn-primary"
+                        style={{ cursor: 'pointer', padding: '8px 16px', borderRadius: 4, display: 'inline-block', fontSize: 13 }}
+                      >
+                        Выбрать файл
+                      </label>
+                      {bannerUrlValue && (
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          style={{ color: 'var(--discord-red)', padding: '8px 16px', fontSize: 13 }}
+                          onClick={() => setValue('bannerUrl', '')}
                         >
                           Удалить
                         </button>
