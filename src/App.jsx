@@ -1,6 +1,7 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Routes, Route, Navigate, useParams, useNavigate } from 'react-router-dom';
 import { useStore } from './store/useStore';
+import { io } from 'socket.io-client';
 import ServerBar from './components/ServerBar';
 import Sidebar from './components/Sidebar';
 import FriendsList from './components/FriendsList';
@@ -79,8 +80,103 @@ function MemberBar() {
 // обертка для синхронизации роутов с Zustand стором~~
 function MainLayout() {
   const { serverId, channelId } = useParams();
-  const { setNavigation, friends, servers, isAuthenticated, fetchInitialData, fetchServers, fetchFriends } = useStore();
+  const { setNavigation, friends, servers, isAuthenticated, fetchInitialData, fetchServers, fetchFriends, activeChannelId } = useStore();
   const navigate = useNavigate();
+
+  // 1. Управление Socket.IO соединением~~
+  const socketRef = useRef(null);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
+      return;
+    }
+
+    const token = localStorage.getItem('discord_token');
+    if (!token) return;
+
+    // подключаемся по Socket.IO к нашему же серверу~~
+    const socket = io({
+      auth: { token }
+    });
+    socketRef.current = socket;
+
+    // запрашиваем разрешение на уведомления в браузере при входе~~
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+
+    socket.on('message', (data) => {
+      try {
+        const { channelId, message } = data;
+        const currentUser = useStore.getState().userProfile;
+
+        // мгновенно обновляем стейт сообщений в Zustand сторе~~
+        useStore.setState((state) => {
+          const channelMessages = state.messages[channelId] || [];
+          if (channelMessages.some(m => m.id === message.id)) return {};
+
+          const updated = [...channelMessages, {
+            ...message,
+            isOwn: message.sender === currentUser.username
+          }];
+          return {
+            messages: {
+              ...state.messages,
+              [channelId]: updated
+            }
+          };
+        });
+
+        // показываем уведомление в браузере, если вкладка неактивна~~
+        if (message.sender !== currentUser.username) {
+          if ('Notification' in window && Notification.permission === 'granted' && document.hidden) {
+            new Notification(`Новое сообщение от ${message.sender}! 💬`, {
+              body: message.content,
+              tag: 'msg_' + channelId
+            });
+          }
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    });
+
+    socket.on('friend', (data) => {
+      fetchFriends();
+      if (data.type === 'request') {
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification('Новый запрос дружбы! 🌸', {
+            body: `${data.from} хочет добавить тебя в друзья~~ ня!`,
+            tag: 'friend_request_' + data.from
+          });
+        }
+      }
+    });
+
+    socket.on('server', () => {
+      fetchServers();
+    });
+
+    socket.on('channel', () => {
+      fetchServers();
+    });
+
+    return () => {
+      socket.disconnect();
+      socketRef.current = null;
+    };
+  }, [isAuthenticated, fetchServers, fetchFriends]);
+
+  // 2. Оповещаем сокеты о переходе в новую комнату чата при смене каналов~~
+  useEffect(() => {
+    if (socketRef.current && activeChannelId) {
+      socketRef.current.emit('join_channel', activeChannelId);
+    }
+  }, [activeChannelId]);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -89,88 +185,6 @@ function MainLayout() {
       fetchInitialData();
     }
   }, [isAuthenticated, navigate]);
-
-  // мгновенное обновление данных по протоколу SSE, ууууу~~
-  useEffect(() => {
-    if (!isAuthenticated) return;
-
-    // запрашиваем разрешение на уведомления в браузере при входе~~
-    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission();
-    }
-
-    const token = localStorage.getItem('discord_token');
-    if (!token) return;
-
-    // подключаем постоянное SSE соединение для мгновенного пуша~~
-    const eventSource = new EventSource(`/api/updates?token=${token}`);
-
-    eventSource.onmessage = (event) => {
-      if (event.data === 'ping') return;
-
-      try {
-        const { type, data } = JSON.parse(event.data);
-        const currentUser = useStore.getState().userProfile;
-
-        if (type === 'message') {
-          const { channelId, message } = data;
-
-          // обновляем сообщения мгновенно в Zustand сторе!
-          useStore.setState((state) => {
-            const channelMessages = state.messages[channelId] || [];
-            // избегаем дубликатов сообщений~~
-            if (channelMessages.some(m => m.id === message.id)) return {};
-            
-            const updated = [...channelMessages, {
-              ...message,
-              isOwn: message.sender === currentUser.username
-            }];
-            return {
-              messages: {
-                ...state.messages,
-                [channelId]: updated
-              }
-            };
-          });
-
-          // если сообщение от другого человека и вкладка неактивна — шлем уведомление~~
-          if (message.sender !== currentUser.username) {
-            if ('Notification' in window && Notification.permission === 'granted' && document.hidden) {
-              new Notification(`Новое сообщение от ${message.sender}! 💬`, {
-                body: message.content,
-                tag: 'msg_' + channelId
-              });
-            }
-          }
-        } else if (type === 'friend') {
-          // обновляем друзей при любом изменении заявки~~
-          fetchFriends();
-
-          if (data.type === 'request') {
-            if ('Notification' in window && Notification.permission === 'granted') {
-              new Notification('Новый запрос дружбы! 🌸', {
-                body: `${data.from} хочет добавить тебя в друзья~~ ня!`,
-                tag: 'friend_request_' + data.from
-              });
-            }
-          }
-        } else if (type === 'server' || type === 'channel') {
-          // обновляем список серверов и каналов~~
-          fetchServers();
-        }
-      } catch (e) {
-        console.error('ошибка обработки sse обновлений:', e);
-      }
-    };
-
-    eventSource.onerror = (err) => {
-      console.error('sse соединение прервалось, переподключение...', err);
-    };
-
-    return () => {
-      eventSource.close();
-    };
-  }, [isAuthenticated, fetchServers, fetchFriends]);
 
   useEffect(() => {
     if (!isAuthenticated) return;

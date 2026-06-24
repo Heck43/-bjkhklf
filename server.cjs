@@ -5,6 +5,7 @@ const jwt = require('jsonwebtoken');
 const path = require('path');
 const fs = require('fs');
 const { Pool } = require('pg');
+const http = require('http');
 
 // привеееет, это наш гибридный бэкенд на экспрессе для рейлвея~~
 // мы перенесли серверы и каналы в бд, а также убрали все тестовые примеры чатов
@@ -14,6 +15,15 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || 'femboy_secret_key_heart_emoji';
 const DB_FILE = path.join(__dirname, 'database.json');
+
+const server = http.createServer(app);
+const { Server } = require('socket.io');
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
+});
 
 app.use(cors());
 app.use(express.json());
@@ -408,56 +418,58 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
-// --- SSE (SERVER-SENT EVENTS) ДЛЯ МГНОВЕННЫХ УВЕДОМЛЕНИЙ И ЧАТА ---
-const sseClients = new Set();
+// --- SOCKET.IO ДЛЯ МГНОВЕННЫХ УВЕДОМЛЕНИЙ И ЧАТА В РЕАЛЬНОМ ВРЕМЕНИ ---
 
-// Отправка SSE события конкретному пользователю~~
-const sendSseToUser = (username, type, data) => {
-  const payload = JSON.stringify({ type, data });
-  for (const client of sseClients) {
-    if (client.username.toLowerCase() === username.toLowerCase()) {
-      client.res.write(`data: ${payload}\n\n`);
-    }
+// Middleware для авторизации сокет-соединений~~
+io.use((socket, next) => {
+  const token = socket.handshake.auth.token || socket.handshake.query.token;
+  if (!token) {
+    return next(new Error("authentication error"));
   }
-};
-
-// Отправка SSE события всем подключенным пользователям~~
-const sendSseToAll = (type, data) => {
-  const payload = JSON.stringify({ type, data });
-  for (const client of sseClients) {
-    client.res.write(`data: ${payload}\n\n`);
-  }
-};
-
-// Эндпоинт для подключения SSE обновлений~~
-app.get('/api/updates', (req, res) => {
-  const token = req.query.token;
-  if (!token) return res.status(401).end();
-
   jwt.verify(token, JWT_SECRET, (err, decodedUser) => {
-    if (err) return res.status(403).end();
-
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.flushHeaders();
-
-    const client = { res, userId: decodedUser.id, username: decodedUser.username };
-    sseClients.add(client);
-    console.log(`sse подключение: @${decodedUser.username} (активно: ${sseClients.size})~~ 🌸`);
-
-    // отправляем ping каждые 15 секунд, чтобы держать соединение открытым~~
-    const pingInterval = setInterval(() => {
-      res.write('data: ping\n\n');
-    }, 15000);
-
-    req.on('close', () => {
-      clearInterval(pingInterval);
-      sseClients.delete(client);
-      console.log(`sse отключение: @${decodedUser.username} (активно: ${sseClients.size})~~ 💾`);
-    });
+    if (err) return next(new Error("authentication error"));
+    socket.user = decodedUser;
+    next();
   });
 });
+
+io.on('connection', (socket) => {
+  const username = socket.user.username;
+  console.log(`сокет подключился: @${username} (id: ${socket.id})~~ 🌸`);
+
+  // Заходим в комнату имени пользователя для ЛС и личных обновлений~~
+  socket.join(`user_${username.toLowerCase()}`);
+
+  // Когда пользователь переходит в текстовый канал или ЛС чат~~
+  socket.on('join_channel', (channelId) => {
+    // выходим из предыдущих комнат каналов (но остаемся в своей личной user_ комнате)~~
+    for (const room of socket.rooms) {
+      if (room !== socket.id && room !== `user_${username.toLowerCase()}`) {
+        socket.leave(room);
+      }
+    }
+    socket.join(channelId);
+    console.log(`@${username} зашел в комнату сокетов: ${channelId}~~ 🔊`);
+  });
+
+  socket.on('disconnect', () => {
+    console.log(`сокет отключился: @${username} (id: ${socket.id})~~ 💾`);
+  });
+});
+
+// Адаптеры для отправки событий через Socket.IO (совместимы с эндпоинтами!)~~
+const sendSseToUser = (username, type, data) => {
+  io.to(`user_${username.toLowerCase()}`).emit(type, data);
+};
+
+const sendSseToAll = (type, data) => {
+  io.emit(type, data);
+};
+
+// Хелпер для комнат в сокетах (чтобы посылать сообщения только участникам канала)~~
+const sendSocketToRoom = (roomId, eventName, data) => {
+  io.to(roomId).emit(eventName, data);
+};
 
 // --- ЭНДПОИНТЫ СЕРВЕРОВ ---
 app.get('/api/servers', authenticateToken, async (req, res) => {
@@ -734,7 +746,7 @@ if (fs.existsSync(distPath)) {
   });
 }
 
-// запускаем наш сервер~~
-app.listen(PORT, () => {
-  console.log(`сервер весело крутится на порту ${PORT}! мяууу~~ 🌸`);
+// запускаем наш сервер через HTTP обертку для поддержки socket.io~~
+server.listen(PORT, () => {
+  console.log(`сервер с поддержкой socket.io весело крутится на порту ${PORT}! мяууу~~ 🌸`);
 });
