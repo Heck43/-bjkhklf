@@ -214,18 +214,25 @@ export const useStore = create((set, get) => ({
       const activeCall = get().activeCall;
 
       if (activeCall && activeCall.channelId === channelId) {
-        // маппим участников с флагом isLocal для текущего пользователя~~
+        // маппим участников с флагом isLocal и состояниями для текущего пользователя~~
         const mapped = participants.map(p => ({
           username: p.username,
           avatarColor: p.avatarColor,
           avatarUrl: p.avatarUrl || '',
-          isLocal: p.username === currentUser.username
+          isLocal: p.username === currentUser.username,
+          isMuted: p.isMuted || false,
+          isDeafened: p.isDeafened || false,
+          isCameraOn: p.isCameraOn || false,
+          isScreenSharing: p.isScreenSharing || false
         }));
+        
+        const screenSharer = mapped.find(p => p.isScreenSharing);
         
         set({
           activeCall: {
             ...activeCall,
             participants: mapped,
+            isScreenSharing: !!screenSharer,
             audioLevels: mapped.map(p => ({ name: p.username, level: 10 }))
           }
         });
@@ -617,8 +624,16 @@ export const useStore = create((set, get) => ({
 
   startCall: (channelId, name) => {
     const socket = get().socket;
+    const isMuted = get().isMuted;
+    const isDeafened = get().isDeafened;
+
     if (socket) {
-      socket.emit('join_voice', channelId);
+      socket.emit('join_voice', channelId, {
+        isMuted,
+        isDeafened,
+        isCameraOn: false,
+        isScreenSharing: false
+      });
     }
 
     const user = get().userProfile;
@@ -626,10 +641,10 @@ export const useStore = create((set, get) => ({
       channelId,
       channelName: name,
       participants: [
-        { username: user.username, avatarColor: user.avatarColor || '#ff8da1', avatarUrl: user.avatarUrl || '', isLocal: true }
+        { username: user.username, avatarColor: user.avatarColor || '#ff8da1', avatarUrl: user.avatarUrl || '', isLocal: true, isMuted, isDeafened, isCameraOn: false, isScreenSharing: false }
       ],
-      isMuted: get().isMuted,
-      isDeafened: get().isDeafened,
+      isMuted,
+      isDeafened,
       isCameraOn: false,
       isScreenSharing: false,
       networkLatency: Array.from({ length: 10 }, (_, i) => ({ time: i, ms: Math.floor(Math.random() * 30) + 15 })),
@@ -655,6 +670,15 @@ export const useStore = create((set, get) => ({
         isMuted: newMuted
       } : null;
 
+      if (state.socket && state.activeCall) {
+        state.socket.emit('update_voice_state', {
+          isMuted: newMuted,
+          isDeafened: state.isDeafened,
+          isCameraOn: state.activeCall.isCameraOn,
+          isScreenSharing: state.activeCall.isScreenSharing
+        });
+      }
+
       return {
         isMuted: newMuted,
         activeCall
@@ -672,6 +696,15 @@ export const useStore = create((set, get) => ({
         isMuted: newMuted
       } : null;
 
+      if (state.socket && state.activeCall) {
+        state.socket.emit('update_voice_state', {
+          isMuted: newMuted,
+          isDeafened: newDeafened,
+          isCameraOn: state.activeCall.isCameraOn,
+          isScreenSharing: state.activeCall.isScreenSharing
+        });
+      }
+
       return {
         isDeafened: newDeafened,
         isMuted: newMuted,
@@ -683,10 +716,21 @@ export const useStore = create((set, get) => ({
   toggleCamera: () => {
     set((state) => {
       if (!state.activeCall) return {};
+      const newCameraOn = !state.activeCall.isCameraOn;
+
+      if (state.socket) {
+        state.socket.emit('update_voice_state', {
+          isMuted: state.isMuted,
+          isDeafened: state.isDeafened,
+          isCameraOn: newCameraOn,
+          isScreenSharing: state.activeCall.isScreenSharing
+        });
+      }
+
       return {
         activeCall: {
           ...state.activeCall,
-          isCameraOn: !state.activeCall.isCameraOn
+          isCameraOn: newCameraOn
         }
       };
     });
@@ -695,10 +739,21 @@ export const useStore = create((set, get) => ({
   toggleScreenShare: () => {
     set((state) => {
       if (!state.activeCall) return {};
+      const newScreenSharing = !state.activeCall.isScreenSharing;
+
+      if (state.socket) {
+        state.socket.emit('update_voice_state', {
+          isMuted: state.isMuted,
+          isDeafened: state.isDeafened,
+          isCameraOn: state.activeCall.isCameraOn,
+          isScreenSharing: newScreenSharing
+        });
+      }
+
       return {
         activeCall: {
           ...state.activeCall,
-          isScreenSharing: !state.activeCall.isScreenSharing
+          isScreenSharing: newScreenSharing
         }
       };
     });

@@ -2,9 +2,126 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useStore } from '../store/useStore';
 import { PhoneOff, Video, VideoOff, Monitor, MonitorOff, Mic, MicOff, Headphones, Wifi } from 'lucide-react';
 
-// ооооой, это же голосовой звоночек! 🔊
-// тут мы выводим участников с аватарками и поддерживаем НАСТОЯЩУЮ трансляцию экрана!
-// посмотрите как круто работает, у меня аж ушки дрожат от восторга~~ ^w^ 🐾
+// оййй~~ тут наш красивый генератор трансляции экрана для тех, кто смотрит стримчик другого котика~~
+// рисуем футуристичные летающие частички и звуковые волны на канвасе, ня! 🌸
+function MockScreenStream({ username }) {
+  const canvasRef = useRef(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    let animationId;
+    let particles = [];
+
+    for (let i = 0; i < 40; i++) {
+      particles.push({
+        x: Math.random() * 400,
+        y: Math.random() * 300,
+        r: Math.random() * 2 + 1,
+        vx: Math.random() * 0.5 - 0.25,
+        vy: Math.random() * 0.5 - 0.25,
+        alpha: Math.random() * 0.5 + 0.2
+      });
+    }
+
+    const resize = () => {
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width;
+      canvas.height = rect.height;
+      
+      particles.forEach(p => {
+        if (p.x > canvas.width) p.x = Math.random() * canvas.width;
+        if (p.y > canvas.height) p.y = Math.random() * canvas.height;
+      });
+    };
+    resize();
+    window.addEventListener('resize', resize);
+
+    let angle = 0;
+
+    const render = () => {
+      ctx.fillStyle = '#0f1012';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.strokeStyle = 'rgba(88, 101, 242, 0.05)';
+      ctx.lineWidth = 1;
+      const gridSize = 40;
+      for (let x = 0; x < canvas.width; x += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+      }
+      for (let y = 0; y < canvas.height; y += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+      }
+
+      particles.forEach(p => {
+        p.x += p.vx;
+        p.y += p.vy;
+        if (p.x < 0 || p.x > canvas.width) p.vx *= -1;
+        if (p.y < 0 || p.y > canvas.height) p.vy *= -1;
+
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(88, 101, 242, ${p.alpha})`;
+        ctx.fill();
+      });
+
+      ctx.beginPath();
+      ctx.strokeStyle = 'rgba(35, 165, 90, 0.4)';
+      ctx.lineWidth = 3;
+      const midY = canvas.height / 2 + 60;
+      for (let x = 0; x < canvas.width; x++) {
+        const y = midY + Math.sin(x * 0.01 + angle) * 15 * Math.sin(angle * 0.5);
+        if (x === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      angle += 0.05;
+
+      const centerX = canvas.width / 2;
+      const centerY = canvas.height / 2 - 40;
+
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, 50, 0, Math.PI * 2);
+      ctx.fillStyle = '#ff8da1';
+      ctx.fill();
+      ctx.strokeStyle = 'var(--discord-blurple)';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 36px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(username.substring(0, 2).toUpperCase(), centerX, centerY);
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 18px sans-serif';
+      ctx.fillText(`Стрим пользователя @${username}`, centerX, centerY + 80);
+
+      ctx.fillStyle = 'var(--text-muted)';
+      ctx.font = '13px sans-serif';
+      ctx.fillText('Соединение установлено • 1080p 60fps', centerX, centerY + 105);
+
+      animationId = requestAnimationFrame(render);
+    };
+
+    render();
+
+    return () => {
+      cancelAnimationFrame(animationId);
+      window.removeEventListener('resize', resize);
+    };
+  }, [username]);
+
+  return <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block', borderRadius: 12 }} />;
+}
 
 export default function VoiceCall() {
   const { 
@@ -49,7 +166,6 @@ export default function VoiceCall() {
       screenStream.getTracks().forEach(track => track.stop());
       setScreenStream(null);
     }
-    // сбрасываем флаг в Zustand сторе, если он еще активен~~
     const state = useStore.getState().activeCall;
     if (state && state.isScreenSharing) {
       toggleScreenShare();
@@ -90,7 +206,10 @@ export default function VoiceCall() {
     );
   }
 
-  const isSharing = activeCall.isScreenSharing && screenStream;
+  // определяем, стримит ли кто-то экран (включая нас или других пользователей)~~
+  const screenSharer = activeCall.participants?.find(p => p.isScreenSharing);
+  const isSharing = !!screenSharer;
+  const isLocalSharing = screenSharer?.isLocal;
 
   return (
     <div className="call-layout" style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -98,7 +217,9 @@ export default function VoiceCall() {
       <div className="call-header" style={{ padding: '16px 20px', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div className="call-title">
           <span>Голосовой звонок: <b>{activeCall.channelName}</b></span>
-          <span className="call-badge" style={{ marginLeft: 8, backgroundColor: 'var(--discord-red)', padding: '2px 6px', borderRadius: 4, fontSize: 10, color: 'white', fontWeight: 'bold' }}>В ЭФИРЕ</span>
+          {isSharing && (
+            <span className="call-badge" style={{ marginLeft: 8, backgroundColor: 'var(--discord-red)', padding: '2px 6px', borderRadius: 4, fontSize: 10, color: 'white', fontWeight: 'bold' }}>В ЭФИРЕ</span>
+          )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--discord-green)', fontSize: 13, fontWeight: 500 }}>
           <Wifi size={16} />
@@ -122,13 +243,17 @@ export default function VoiceCall() {
             justifyContent: 'center',
             border: '1px solid var(--glass-border)'
           }}>
-            <video 
-              ref={videoRef} 
-              autoPlay 
-              playsInline 
-              muted 
-              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-            />
+            {isLocalSharing ? (
+              <video 
+                ref={videoRef} 
+                autoPlay 
+                playsInline 
+                muted 
+                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+              />
+            ) : (
+              <MockScreenStream username={screenSharer?.username || 'user'} />
+            )}
             <div style={{
               position: 'absolute',
               bottom: 12,
@@ -144,7 +269,7 @@ export default function VoiceCall() {
               gap: 6
             }}>
               <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: 'var(--discord-red)' }}></span>
-              <span>Стрим экрана: @{activeCall.participants[0]?.username}</span>
+              <span>Стрим экрана: @{screenSharer?.username}</span>
             </div>
           </div>
 
@@ -159,7 +284,7 @@ export default function VoiceCall() {
           }}>
             {activeCall.participants.map((p) => {
               const audioLevel = activeCall.audioLevels?.find(al => al.name === p.username)?.level || 0;
-              const isSpeaking = audioLevel > 30;
+              const isSpeaking = audioLevel > 30 && !p.isMuted && !p.isDeafened;
 
               return (
                 <div 
@@ -191,13 +316,39 @@ export default function VoiceCall() {
                       fontSize: 22,
                       color: '#fff',
                       fontWeight: 'bold',
-                      overflow: 'hidden'
                     }}
                   >
-                    {p.avatarUrl ? (
-                      <img src={p.avatarUrl} alt={p.username} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
-                    ) : (
-                      p.username.substring(0, 2)
+                    <div style={{ width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {p.avatarUrl ? (
+                        <img src={p.avatarUrl} alt={p.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        p.username.substring(0, 2)
+                      )}
+                    </div>
+
+                    {/* значок мута / глухоты~~ */}
+                    {(p.isMuted || p.isDeafened) && (
+                      <div style={{
+                        position: 'absolute',
+                        bottom: -2,
+                        right: -2,
+                        backgroundColor: 'var(--discord-red)',
+                        borderRadius: '50%',
+                        width: 22,
+                        height: 22,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        border: '2px solid rgba(30,31,34,1)',
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                        zIndex: 2
+                      }}>
+                        {p.isDeafened ? (
+                          <Headphones size={12} style={{ color: '#fff' }} />
+                        ) : (
+                          <MicOff size={12} style={{ color: '#fff' }} />
+                        )}
+                      </div>
                     )}
                   </div>
                   <span style={{ fontSize: 13, fontWeight: 'bold', color: '#fff', marginTop: 10 }}>
@@ -209,7 +360,7 @@ export default function VoiceCall() {
           </div>
         </div>
       ) : (
-        /* ОБЫЧНЫЙ ГРИД УЧАСТНИКОВ (Без графиков!) */
+        /* ОБЫЧНЫЙ ГРИД УЧАСТНИКОВ */
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, minHeight: 0 }}>
           <div style={{
             display: 'grid',
@@ -221,7 +372,7 @@ export default function VoiceCall() {
           }}>
             {activeCall.participants.map((p) => {
               const audioLevel = activeCall.audioLevels?.find(al => al.name === p.username)?.level || 0;
-              const isSpeaking = audioLevel > 30;
+              const isSpeaking = audioLevel > 30 && !p.isMuted && !p.isDeafened;
 
               return (
                 <div 
@@ -253,13 +404,39 @@ export default function VoiceCall() {
                       fontSize: 32,
                       color: '#fff',
                       fontWeight: 'bold',
-                      overflow: 'hidden'
                     }}
                   >
-                    {p.avatarUrl ? (
-                      <img src={p.avatarUrl} alt={p.username} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
-                    ) : (
-                      p.username.substring(0, 2)
+                    <div style={{ width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {p.avatarUrl ? (
+                        <img src={p.avatarUrl} alt={p.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        p.username.substring(0, 2)
+                      )}
+                    </div>
+
+                    {/* значок мута / глухоты~~ */}
+                    {(p.isMuted || p.isDeafened) && (
+                      <div style={{
+                        position: 'absolute',
+                        bottom: 2,
+                        right: 2,
+                        backgroundColor: 'var(--discord-red)',
+                        borderRadius: '50%',
+                        width: 28,
+                        height: 28,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        border: '3px solid rgba(30,31,34,1)',
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                        zIndex: 2
+                      }}>
+                        {p.isDeafened ? (
+                          <Headphones size={14} style={{ color: '#fff' }} />
+                        ) : (
+                          <MicOff size={14} style={{ color: '#fff' }} />
+                        )}
+                      </div>
                     )}
                   </div>
                   <span style={{ fontSize: 15, fontWeight: 'bold', color: '#fff', marginTop: 16 }}>

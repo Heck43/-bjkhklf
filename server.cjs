@@ -648,13 +648,13 @@ io.on('connection', (socket) => {
   });
 
   // Вход в голосовой канал~~
-  socket.on('join_voice', async (channelId) => {
+  socket.on('join_voice', async (channelId, initialState) => {
     leaveVoice(socket);
-
+ 
     const username = socket.user.username;
     let avatarColor = '#ff8da1';
     let avatarUrl = '';
-
+ 
     try {
       const u = await db.getUserByUsername(username);
       if (u) {
@@ -664,27 +664,52 @@ io.on('connection', (socket) => {
     } catch (e) {
       console.error('ошибка при получении юзера для голосового канала:', e);
     }
-
+ 
     if (!voiceStates[channelId]) {
       voiceStates[channelId] = [];
     }
-
+ 
+    const state = initialState || { isMuted: false, isDeafened: false, isCameraOn: false, isScreenSharing: false };
+ 
     if (!voiceStates[channelId].some(p => p.username === username)) {
       voiceStates[channelId].push({
         username,
         socketId: socket.id,
         avatarColor,
-        avatarUrl
+        avatarUrl,
+        isMuted: state.isMuted,
+        isDeafened: state.isDeafened,
+        isCameraOn: state.isCameraOn,
+        isScreenSharing: state.isScreenSharing
       });
     }
-
+ 
     socket.join(channelId);
     console.log(`@${username} подключился к голосу в канале: ${channelId}~~ 🔊`);
-
+ 
     io.to(channelId).emit('voice_state_update', {
       channelId,
       participants: voiceStates[channelId]
     });
+  });
+ 
+  // Обновление состояния в звонке (муты, камера, стрим)~~
+  socket.on('update_voice_state', (state) => {
+    for (const channelId in voiceStates) {
+      const list = voiceStates[channelId];
+      const participant = list.find(p => p.socketId === socket.id);
+      if (participant) {
+        participant.isMuted = state.isMuted;
+        participant.isDeafened = state.isDeafened;
+        participant.isCameraOn = state.isCameraOn;
+        participant.isScreenSharing = state.isScreenSharing;
+        
+        io.to(channelId).emit('voice_state_update', {
+          channelId,
+          participants: list
+        });
+      }
+    }
   });
 
   // Выход из голосового канала~~
