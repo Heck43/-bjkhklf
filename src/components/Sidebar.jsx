@@ -17,10 +17,13 @@ export default function Sidebar() {
     setSettingsOpen,
     activeCall,
     startCall,
+    isMuted,
+    isDeafened,
     toggleMute,
     toggleDeafen,
     createChannel,
-    inviteFriendToServer
+    inviteFriendToServer,
+    viewUserProfile
   } = useStore();
 
   const navigate = useNavigate();
@@ -192,7 +195,7 @@ export default function Sidebar() {
 
       {/* нижняя панель с профилем пользователя~~ */}
       <div className="user-panel">
-        <div className="user-info" onClick={() => setSettingsOpen(true)} title="Настройки профиля">
+        <div className="user-info" onClick={() => viewUserProfile(userProfile.username)} title="Мой профиль">
           <div className="avatar-container">
             {userProfile.avatarUrl ? (
               <img src={userProfile.avatarUrl} alt="avatar" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
@@ -211,17 +214,18 @@ export default function Sidebar() {
 
         <div className="user-controls">
           <button 
-            className={`control-btn ${activeCall?.isMuted ? 'active' : ''}`} 
+            className={`control-btn ${isMuted ? 'active' : ''}`} 
             onClick={toggleMute}
-            title={activeCall?.isMuted ? "Включить микрофон" : "Выключить микрофон"}
+            title={isMuted ? "Включить микрофон" : "Выключить микрофон"}
+            style={{ color: isMuted ? 'var(--discord-red)' : '' }}
           >
-            {activeCall?.isMuted ? <MicOff size={18} /> : <Mic size={18} />}
+            {isMuted ? <MicOff size={18} /> : <Mic size={18} />}
           </button>
           <button 
             className="control-btn" 
             onClick={toggleDeafen}
-            style={{ color: activeCall?.isDeafened ? 'var(--discord-red)' : '' }}
-            title={activeCall?.isDeafened ? "Включить звук" : "Выключить звук"}
+            style={{ color: isDeafened ? 'var(--discord-red)' : '' }}
+            title={isDeafened ? "Включить звук" : "Выключить звук"}
           >
             <Headphones size={18} />
           </button>

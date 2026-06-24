@@ -57,6 +57,8 @@ export const useStore = create((set, get) => ({
   
   // настройки~~
   settingsOpen: false,
+  isMuted: false, // глобальный мут микрофона~~
+  isDeafened: false, // глобальный мут звука~~
 
   // сокет-соединение~~
   socket: null,
@@ -558,8 +560,8 @@ export const useStore = create((set, get) => ({
       participants: [
         { username: user.username, avatarColor: user.avatarColor || '#ff8da1', avatarUrl: user.avatarUrl || '', isLocal: true }
       ],
-      isMuted: false,
-      isDeafened: false,
+      isMuted: get().isMuted,
+      isDeafened: get().isDeafened,
       isCameraOn: false,
       isScreenSharing: false,
       networkLatency: Array.from({ length: 10 }, (_, i) => ({ time: i, ms: Math.floor(Math.random() * 30) + 15 })),
@@ -579,28 +581,33 @@ export const useStore = create((set, get) => ({
 
   toggleMute: () => {
     set((state) => {
-      if (!state.activeCall) return {};
-      const newMuted = !state.activeCall.isMuted;
+      const newMuted = !state.isMuted;
+      const activeCall = state.activeCall ? {
+        ...state.activeCall,
+        isMuted: newMuted
+      } : null;
+
       return {
-        activeCall: {
-          ...state.activeCall,
-          isMuted: newMuted,
-          isDeafened: newMuted ? state.activeCall.isDeafened : state.activeCall.isDeafened
-        }
+        isMuted: newMuted,
+        activeCall
       };
     });
   },
 
   toggleDeafen: () => {
     set((state) => {
-      if (!state.activeCall) return {};
-      const newDeafened = !state.activeCall.isDeafened;
+      const newDeafened = !state.isDeafened;
+      const newMuted = newDeafened ? true : state.isMuted;
+      const activeCall = state.activeCall ? {
+        ...state.activeCall,
+        isDeafened: newDeafened,
+        isMuted: newMuted
+      } : null;
+
       return {
-        activeCall: {
-          ...state.activeCall,
-          isDeafened: newDeafened,
-          isMuted: newDeafened ? true : state.activeCall.isMuted
-        }
+        isDeafened: newDeafened,
+        isMuted: newMuted,
+        activeCall
       };
     });
   },

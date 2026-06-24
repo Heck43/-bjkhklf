@@ -506,7 +506,7 @@ body {
 }
 
 .message-content {
-  font-size: 14px;
+  font-size: var(--chat-font-size, 14px);
   color: var(--text-normal);
   line-height: 1.4;
   word-wrap: break-word;
@@ -1522,4 +1522,128 @@ body {
 @keyframes scaleIn {
   from { transform: scale(0.95); opacity: 0; }
   to { transform: scale(1); opacity: 1; }
+}
+
+/* полные настройки в стиле дискорда~~ ня! */
+.settings-modal.full-screen {
+  width: 100vw;
+  height: 100vh;
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 0;
+  border: none;
+  display: flex;
+  flex-direction: row;
+  background-color: var(--background-sidebar);
+  animation: fadeIn 0.25s ease-out;
+}
+
+.settings-sidebar {
+  width: 280px;
+  background-color: var(--background-sidebar);
+  border-right: 1px solid var(--background-darkest);
+  display: flex;
+  flex-direction: column;
+  padding: 60px 12px 60px 40px;
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+.settings-content-wrapper {
+  flex: 1;
+  background-color: var(--background-mobile);
+  padding: 60px 80px;
+  box-sizing: border-box;
+  overflow-y: auto;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-content-inner {
+  max-width: 680px;
+  width: 100%;
+}
+
+.settings-sidebar-header {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 6px 10px;
+  margin-top: 16px;
+  margin-bottom: 4px;
+}
+
+.settings-sidebar-header:first-of-type {
+  margin-top: 0;
+}
+
+.settings-sidebar-item {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-muted);
+  padding: 6px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.settings-sidebar-item:hover {
+  background-color: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.settings-sidebar-item.active {
+  background-color: var(--background-modifier-active);
+  color: var(--header-primary);
+  font-weight: 600;
+}
+
+.settings-sidebar-item.red {
+  color: var(--discord-red);
+}
+
+.settings-sidebar-item.red:hover {
+  background-color: rgba(237, 66, 69, 0.1);
+  color: #fff;
+}
+
+.esc-btn-container {
+  position: absolute;
+  right: 60px;
+  top: 60px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.esc-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid var(--text-muted);
+  background-color: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.esc-btn:hover {
+  background-color: var(--background-modifier-hover);
+  border-color: var(--header-primary);
+  color: var(--header-primary);
+  transform: scale(1.05);
+}
+
+.esc-btn-text {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
 }

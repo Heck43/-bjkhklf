@@ -912,6 +912,7 @@ app.get('/api/users/:username', authenticateToken, async (req, res) => {
     if (!user) return res.status(404).json({ error: 'пользователь не найден!' });
     res.json({
       username: user.username,
+      displayName: user.displayName || user.username,
       avatarColor: user.avatarColor,
       accentColor: user.accentColor,
       customStatus: user.customStatus,
