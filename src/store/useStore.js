@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { io } from 'socket.io-client';
 
 // привеееет, это наш стор на Zustand, подключенный к реальной БД sqlite3!
 // теперь все данные сохраняются на сервере и доступны в сети на Railway.com~~ мяу! 🐾
@@ -53,6 +54,9 @@ export const useStore = create((set, get) => ({
   // настройки~~
   settingsOpen: false,
 
+  // сокет-соединение~~
+  socket: null,
+
   // --- АВТОРИЗАЦИЯ (LOGIN / REGISTER) ---
   
   login: async (username, password) => {
@@ -100,6 +104,7 @@ export const useStore = create((set, get) => ({
 
   logout: () => {
     localStorage.removeItem('discord_token');
+    get().disconnectSocket();
     set({
       token: null,
       isAuthenticated: false,
@@ -110,20 +115,107 @@ export const useStore = create((set, get) => ({
     });
   },
 
+  // --- ИНИЦИАЛИЗАЦИЯ И УПРАВЛЕНИЕ СОКЕТАМИ ---
+
+  initSocket: () => {
+    if (get().socket) return;
+
+    const token = localStorage.getItem('discord_token');
+    if (!token) return;
+
+    // подключаемся по Socket.IO к нашему же серверу~~
+    const socket = io({
+      auth: { token }
+    });
+
+    socket.on('connect', () => {
+      console.log('успешно подключились к socket.io! мяуу~~');
+      // при переподключении заходим в активный канал, если он выбран~~
+      const activeCh = get().activeChannelId;
+      if (activeCh && activeCh !== 'friends') {
+        socket.emit('join_channel', activeCh);
+      }
+    });
+
+    socket.on('message', (data) => {
+      const { channelId, message } = data;
+      const currentUser = get().userProfile;
+
+      set((state) => {
+        const channelMessages = state.messages[channelId] || [];
+        // предотвращаем дублирование сообщений (проверка по id)~~
+        if (channelMessages.some(m => m.id === message.id)) return {};
+
+        return {
+          messages: {
+            ...state.messages,
+            [channelId]: [...channelMessages, {
+              ...message,
+              isOwn: message.sender === currentUser.username
+            }]
+          }
+        };
+      });
+
+      // показываем уведомление в браузере при свернутой вкладке~~
+      if (message.sender !== currentUser.username) {
+        if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted' && document.hidden) {
+          new Notification(`Новое сообщение от ${message.sender}! 💬`, {
+            body: message.content,
+            tag: 'msg_' + channelId
+          });
+        }
+      }
+    });
+
+    socket.on('friend', (data) => {
+      get().fetchFriends();
+      if (data.type === 'request') {
+        if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+          new Notification('Новый запрос дружбы! 🌸', {
+            body: `${data.from} хочет добавить тебя в друзья~~ ня!`,
+            tag: 'friend_request_' + data.from
+          });
+        }
+      }
+    });
+
+    socket.on('server', () => {
+      get().fetchServers();
+    });
+
+    socket.on('channel', () => {
+      get().fetchServers();
+    });
+
+    set({ socket });
+  },
+
+  disconnectSocket: () => {
+    const socket = get().socket;
+    if (socket) {
+      socket.disconnect();
+      set({ socket: null });
+    }
+  },
+
   // --- ЗАГРУЗКА ДАННЫХ ИЗ БАЗЫ ---
 
   fetchInitialData: async () => {
     if (!get().isAuthenticated) return;
     try {
-      // 1. загружаем инфу о себе~~
+      // 1. запускаем и инициализируем сокеты~~
+      get().initSocket();
+
+      // 2. загружаем инфу о себе~~
       const profile = await apiFetch('/api/auth/me');
       set({ userProfile: profile });
 
-      // 2. загружаем список серверов и друзей из базы~~
+      // 3. загружаем список серверов и друзей из базы~~
       await get().fetchServers();
       await get().fetchFriends();
 
-      // 3. загружаем сообщения для активного канала, если он текстовый~~
+      // 4. загружаем сообщения для активного канала, если он текстовый~~
       const activeCh = get().activeChannelId;
       if (activeCh && activeCh !== 'friends') {
         if (activeCh.startsWith('dm_') && get().activeDmUser) {
@@ -190,6 +282,19 @@ export const useStore = create((set, get) => ({
 
   setNavigation: (serverId, channelId, dmUser = null) => {
     set({ activeServerId: serverId, activeChannelId: channelId, activeDmUser: dmUser });
+    
+    // оповещаем сокеты о переходе в новую комнату чата~~
+    const socket = get().socket;
+    if (socket && channelId) {
+      if (channelId.startsWith('dm_') && dmUser) {
+        const user = get().userProfile;
+        const dmKey = 'dm_' + [user.username, dmUser.username].sort().join('_');
+        socket.emit('join_channel', dmKey);
+      } else {
+        socket.emit('join_channel', channelId);
+      }
+    }
+
     // при переходе в канал загружаем его историю сообщений из бд~~
     if (channelId && channelId !== 'friends') {
       if (channelId.startsWith('dm_') && dmUser) {
@@ -235,9 +340,11 @@ export const useStore = create((set, get) => ({
         })
       });
 
-      // обновляем стейт сообщений~~
+      // обновляем стейт сообщений, исключая дубликаты с сокетом~~
       set((state) => {
         const channelMessages = state.messages[channelId] || [];
+        if (channelMessages.some(m => m.id === newMsg.id)) return {};
+
         return {
           messages: {
             ...state.messages,
