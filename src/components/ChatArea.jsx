@@ -231,7 +231,7 @@ export default function ChatArea() {
             maxHeight: '300px',
             width: 'auto',
             height: 'auto',
-            objectFit: 'contain',
+            alignSelf: 'flex-start', // выравниваем по левому краю, чтобы было ровненько~~ мяу!
             borderRadius: '8px',
             marginTop: '8px',
             border: '1px solid var(--glass-border)',
