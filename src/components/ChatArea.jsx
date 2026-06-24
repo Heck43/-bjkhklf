@@ -1,6 +1,144 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from '../store/useStore';
+import { useNavigate } from 'react-router-dom';
 import { Hash, Search, Send, User, Paperclip } from 'lucide-react';
+
+// компонент для виджета приглашений на приватные серверы~~ мяу! 🐾
+function ServerInviteCard({ serverId }) {
+  const { servers, joinServer } = useStore();
+  const navigate = useNavigate();
+  const [serverInfo, setServerInfo] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    const fetchInfo = async () => {
+      try {
+        const token = localStorage.getItem('discord_token');
+        const response = await fetch(`/api/servers/${serverId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (active) setServerInfo(data);
+        }
+      } catch (e) {
+        console.error('ошибка загрузки данных сервера для виджета:', e);
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    fetchInfo();
+    return () => { active = false; };
+  }, [serverId]);
+
+  if (loading) {
+    return (
+      <div className="invite-card loading" style={{
+        marginTop: 10,
+        padding: 12,
+        borderRadius: 8,
+        backgroundColor: 'var(--background-darkest)',
+        border: '1px solid var(--glass-border)',
+        fontSize: 13,
+        color: 'var(--text-muted)'
+      }}>
+        загрузка приглашения... мяу~~ 🐾
+      </div>
+    );
+  }
+
+  if (!serverInfo) return null;
+
+  const isMember = servers.some(s => s.id === serverId);
+
+  const handleAction = async () => {
+    if (isMember) {
+      const matchedServer = servers.find(s => s.id === serverId);
+      const firstChannel = matchedServer?.channels?.[0];
+      if (firstChannel) {
+        navigate(`/channels/${serverId}/${firstChannel.id}`);
+      } else {
+        navigate(`/channels/${serverId}/none`);
+      }
+    } else {
+      const res = await joinServer(serverId);
+      if (res.success) {
+        const updatedServers = useStore.getState().servers;
+        const matchedServer = updatedServers.find(s => s.id === serverId);
+        const firstChannel = matchedServer?.channels?.[0];
+        if (firstChannel) {
+          navigate(`/channels/${serverId}/${firstChannel.id}`);
+        } else {
+          navigate(`/channels/${serverId}/none`);
+        }
+      } else {
+        alert(res.message || 'не удалось зайти на сервер, ня~~');
+      }
+    }
+  };
+
+  return (
+    <div className="invite-card" style={{
+      marginTop: 10,
+      padding: '12px 16px',
+      borderRadius: 12,
+      backgroundColor: 'rgba(30, 31, 34, 0.65)',
+      border: '1px solid rgba(255, 255, 255, 0.08)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 16,
+      maxWidth: '430px',
+      backdropFilter: 'blur(10px)',
+      boxShadow: '0 8px 24px rgba(0, 0, 0, 0.2)',
+      transition: 'all 0.2s ease'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{
+          width: 44,
+          height: 44,
+          borderRadius: 12,
+          backgroundColor: 'rgba(255, 255, 255, 0.05)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: 24
+        }}>
+          {serverInfo.icon || '🦊'}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <span style={{ fontSize: 10, fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            {isMember ? 'ты уже на этом сервере' : 'приглашение на сервер'}
+          </span>
+          <span style={{ fontSize: 15, fontWeight: 'bold', color: '#fff', marginTop: 2 }}>
+            {serverInfo.name}
+          </span>
+        </div>
+      </div>
+      <button
+        onClick={handleAction}
+        className="btn-primary"
+        style={{
+          padding: '8px 16px',
+          borderRadius: 6,
+          fontSize: 13,
+          fontWeight: 'bold',
+          height: 'auto',
+          backgroundColor: isMember ? 'rgba(78, 80, 88, 0.7)' : 'var(--discord-blurple)',
+          color: '#fff',
+          cursor: 'pointer',
+          border: 'none',
+          transition: 'all 0.2s ease'
+        }}
+      >
+        {isMember ? 'Перейти' : 'Принять'}
+      </button>
+    </div>
+  );
+}
 
 // мрррр~~ это наша область чатика!
 // мы скроллим вниз при новых сообщениях и поддерживаем поиск, ня!
@@ -96,7 +234,19 @@ export default function ChatArea() {
         />
       );
     }
-    return <div className="message-content">{content}</div>;
+
+    // Ищем коды серверов в тексте сообщения, ня~~
+    const inviteRegex = /s_[a-zA-Z0-9_]+/g;
+    const matches = content.match(inviteRegex);
+
+    return (
+      <div className="message-content">
+        <div>{content}</div>
+        {matches && matches.map(serverId => (
+          <ServerInviteCard key={serverId} serverId={serverId} />
+        ))}
+      </div>
+    );
   };
 
   return (

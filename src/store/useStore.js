@@ -43,6 +43,7 @@ export const useStore = create((set, get) => ({
   selectedProfileUser: null,
 
   servers: [],
+  serverMembers: [], // реальные участники текущего сервера~~ ня!
   friends: [],
   messages: {}, // { channelId: [messages] }
   
@@ -214,6 +215,14 @@ export const useStore = create((set, get) => ({
       get().fetchServers();
     });
 
+    // слушаем изменения участников сервера от сокета~~
+    socket.on('server_members', (data) => {
+      const activeServerId = get().activeServerId;
+      if (activeServerId && activeServerId === data.serverId) {
+        get().fetchServerMembers(activeServerId);
+      }
+    });
+
     set({ socket });
   },
 
@@ -268,6 +277,17 @@ export const useStore = create((set, get) => ({
     }
   },
 
+  // загружаем список участников выбранного сервера~~
+  fetchServerMembers: async (serverId) => {
+    if (!serverId) return;
+    try {
+      const data = await apiFetch(`/api/servers/${serverId}/members`);
+      set({ serverMembers: data });
+    } catch (e) {
+      console.error('ошибка загрузки участников сервера:', e);
+    }
+  },
+
   fetchFriends: async () => {
     try {
       const rawFriends = await apiFetch('/api/friends');
@@ -313,6 +333,13 @@ export const useStore = create((set, get) => ({
   setNavigation: (serverId, channelId, dmUser = null) => {
     set({ activeServerId: serverId, activeChannelId: channelId, activeDmUser: dmUser });
     
+    // загружаем участников сервера, если мы перешли на сервер, ня~~
+    if (serverId) {
+      get().fetchServerMembers(serverId);
+    } else {
+      set({ serverMembers: [] });
+    }
+
     // оповещаем сокеты о переходе в новую комнату чата~~
     const socket = get().socket;
     if (socket && channelId) {
@@ -418,6 +445,33 @@ export const useStore = create((set, get) => ({
       return { success: true, server: newServer };
     } catch (e) {
       console.error('ошибка создания сервера:', e);
+      return { success: false, message: e.message };
+    }
+  },
+
+  joinServer: async (serverId) => {
+    try {
+      const res = await apiFetch('/api/servers/join', {
+        method: 'POST',
+        body: JSON.stringify({ serverId })
+      });
+      await get().fetchServers();
+      return { success: true, message: res.message };
+    } catch (e) {
+      console.error('ошибка входа на сервер:', e);
+      return { success: false, message: e.message };
+    }
+  },
+
+  inviteFriendToServer: async (serverId, friendUsername) => {
+    try {
+      const res = await apiFetch(`/api/servers/${serverId}/invite`, {
+        method: 'POST',
+        body: JSON.stringify({ friendUsername })
+      });
+      return { success: true, message: res.message };
+    } catch (e) {
+      console.error('ошибка приглашения друга:', e);
       return { success: false, message: e.message };
     }
   },

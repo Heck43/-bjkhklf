@@ -16,9 +16,10 @@ import Auth from './pages/Auth';
 
 // маленький внутренний компонент для списка участников сервера справа~~
 function MemberBar() {
-  const { friends, userProfile, viewUserProfile } = useStore();
-  const onlineMembers = friends.filter(f => f.relation === 'friend' && f.status !== 'offline');
-  const offlineMembers = friends.filter(f => f.relation === 'friend' && f.status === 'offline');
+  const { serverMembers, userProfile, viewUserProfile } = useStore();
+  const others = serverMembers.filter(m => m.username.toLowerCase() !== userProfile.username.toLowerCase());
+  const onlineMembers = others.filter(m => m.status !== 'offline');
+  const offlineMembers = others.filter(m => m.status === 'offline');
 
   return (
     <div className="members-sidebar">
@@ -38,12 +39,12 @@ function MemberBar() {
             <div className="status-dot online" />
           </div>
           <div className="user-meta">
-            <span className="username" style={{ color: 'var(--discord-red)' }}>{userProfile.username}</span>
+            <span className="username" style={{ color: 'var(--discord-red)' }}>{userProfile.displayName || userProfile.username}</span>
             <span className="custom-status">{userProfile.customStatus}</span>
           </div>
         </div>
 
-        {/* остальные друзья в сети~~ */}
+        {/* остальные участники в сети~~ */}
         {onlineMembers.map(m => (
           <div key={m.id} className="member-item" style={{ cursor: 'pointer' }} onClick={() => viewUserProfile(m.username)}>
             <div className="avatar-container" style={{ width: 32, height: 32 }}>
@@ -57,7 +58,7 @@ function MemberBar() {
               <div className={`status-dot ${m.status}`} />
             </div>
             <div className="user-meta">
-              <span className="username">{m.username}</span>
+              <span className="username">{m.displayName || m.username}</span>
               <span className="custom-status">{m.customStatus}</span>
             </div>
           </div>
@@ -80,7 +81,7 @@ function MemberBar() {
               <div className="status-dot offline" />
             </div>
             <div className="user-meta">
-              <span className="username">{m.username}</span>
+              <span className="username">{m.displayName || m.username}</span>
               <span className="custom-status">{m.customStatus}</span>
             </div>
           </div>

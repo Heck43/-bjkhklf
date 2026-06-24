@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useStore } from '../store/useStore';
 import { useNavigate } from 'react-router-dom';
-import { Mic, MicOff, Headphones, Settings, Hash, Volume2, Users, Plus, X } from 'lucide-react';
+import { Mic, MicOff, Headphones, Settings, Hash, Volume2, Users, Plus, X, UserPlus } from 'lucide-react';
 
 // ууууу~~ а это наша боковая панелька!
 // тут живут каналы и личные переписки...
@@ -19,7 +19,8 @@ export default function Sidebar() {
     startCall,
     toggleMute,
     toggleDeafen,
-    createChannel
+    createChannel,
+    inviteFriendToServer
   } = useStore();
 
   const navigate = useNavigate();
@@ -28,6 +29,16 @@ export default function Sidebar() {
   const [showChannelModal, setShowChannelModal] = useState(false);
   const [newChannelName, setNewChannelName] = useState('');
   const [newChannelType, setNewChannelType] = useState('text'); // 'text' или 'voice'
+
+  // стейты для приглашения друзей~~
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [invitingFriend, setInvitingFriend] = useState(null);
+
+  const handleInviteFriend = async (friendUsername) => {
+    setInvitingFriend(friendUsername);
+    await inviteFriendToServer(activeServerId, friendUsername);
+    setTimeout(() => setInvitingFriend(null), 2000);
+  };
 
   // ищем активный сервер, если он есть~~
   const activeServer = servers.find(s => s.id === activeServerId);
@@ -75,8 +86,17 @@ export default function Sidebar() {
   return (
     <div className="sidebar">
       {/* верхний заголовок боковой панели~~ */}
-      <div className="sidebar-header">
+      <div className="sidebar-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>{activeServer ? activeServer.name : 'Главная'}</span>
+        {activeServer && activeServer.id !== 's_public_den' && (
+          <button 
+            onClick={() => setShowInviteModal(true)}
+            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 4 }}
+            title="Пригласить друзей"
+          >
+            <UserPlus size={16} />
+          </button>
+        )}
       </div>
 
       {/* список каналов или личных сообщений~~ */}
@@ -303,6 +323,72 @@ export default function Sidebar() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* красивое модальное окно приглашения друзей~~ мяу! */}
+      {showInviteModal && activeServer && (
+        <div className="settings-overlay" onClick={() => setShowInviteModal(false)}>
+          <div className="settings-modal" style={{ width: 400 }} onClick={(e) => e.stopPropagation()}>
+            <div className="settings-header">
+              <span className="settings-title">Пригласить на "{activeServer.name}"</span>
+              <button className="close-modal-btn" onClick={() => setShowInviteModal(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="settings-body" style={{ padding: '20px' }}>
+              <div style={{ marginBottom: 16 }}>
+                <label className="form-label" style={{ fontSize: 11 }}>КОД СЕРВЕРА (ОТПРАВЬ ДРУГУ В ЧАТ):</label>
+                <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    readOnly 
+                    value={activeServer.id} 
+                    style={{ fontFamily: 'monospace', fontSize: 13, flex: 1 }}
+                  />
+                  <button 
+                    type="button"
+                    className="btn-primary" 
+                    style={{ padding: '0 12px', fontSize: 12, height: 'auto', cursor: 'pointer' }}
+                    onClick={() => {
+                      navigator.clipboard.writeText(activeServer.id);
+                      alert("Код сервера скопирован в буфер обмена, ня~~");
+                    }}
+                  >
+                    Копия
+                  </button>
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" style={{ fontSize: 11 }}>ИЛИ ВЫБЕРИ ДРУГА ДЛЯ ПРИГЛАШЕНИЯ:</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8, maxHeight: 200, overflowY: 'auto', paddingRight: 4 }}>
+                  {dmFriends.length === 0 ? (
+                    <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Список друзей пуст...</span>
+                  ) : (
+                    dmFriends.map(friend => {
+                      const isInviting = invitingFriend === friend.username;
+                      return (
+                        <div key={friend.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px', borderRadius: 6, backgroundColor: 'var(--background-darkest)' }}>
+                          <span style={{ fontSize: 14, color: '#fff' }}>{friend.displayName || friend.username}</span>
+                          <button
+                            type="button"
+                            className="btn-primary"
+                            style={{ padding: '4px 12px', fontSize: 12, height: 'auto', cursor: 'pointer' }}
+                            onClick={() => handleInviteFriend(friend.username)}
+                            disabled={isInviting}
+                          >
+                            {isInviting ? 'Отправлено!' : 'Пригласить'}
+                          </button>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

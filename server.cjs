@@ -98,6 +98,14 @@ const db = {
           )
         `);
         await client.query(`
+          CREATE TABLE IF NOT EXISTS server_members (
+            id SERIAL PRIMARY KEY,
+            server_id VARCHAR(50) NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            UNIQUE(server_id, user_id)
+          )
+        `);
+        await client.query(`
           CREATE TABLE IF NOT EXISTS channels (
             id VARCHAR(50) PRIMARY KEY,
             server_id VARCHAR(50) NOT NULL,
@@ -128,20 +136,34 @@ const db = {
           )
         `);
 
+        // Создаем дефолтный публичный сервер, если его нет~~
+        const pubServer = await client.query("SELECT * FROM servers WHERE id = 's_public_den'");
+        if (pubServer.rows.length === 0) {
+          await client.query("INSERT INTO servers (id, name, icon) VALUES ('s_public_den', 'Публичная Нора', '🦊')");
+          await client.query("INSERT INTO channels (id, server_id, name, type) VALUES ('c_public_general', 's_public_den', 'general', 'text')");
+          await client.query("INSERT INTO channels (id, server_id, name, type) VALUES ('c_public_voice', 's_public_den', 'voice', 'voice')");
+        }
+
       } finally {
         client.release();
       }
     } else {
       const dbData = readDb();
-      if (!dbData.servers) dbData.servers = [];
-      if (!dbData.channels) dbData.channels = [];
+      if (!dbData.servers || dbData.servers.length === 0) {
+        dbData.servers = [{ id: 's_public_den', name: 'Публичная Нора', icon: '🦊' }];
+        dbData.channels = [
+          { id: 'c_public_general', server_id: 's_public_den', name: 'general', type: 'text' },
+          { id: 'c_public_voice', server_id: 's_public_den', name: 'voice', type: 'voice' }
+        ];
+      }
+      if (!dbData.server_members) dbData.server_members = [];
       writeDb(dbData);
       console.log('база данных json готова, сервера пустые, мяу!~~');
     }
   },
 
   // Создать новый сервер в бд~~
-  addServer: async (name, icon) => {
+  addServer: async (name, icon, userId) => {
     const id = 's_' + Date.now() + Math.random().toString(36).substr(2, 5);
     if (isPostgres) {
       const res = await pgPool.query(
@@ -149,12 +171,21 @@ const db = {
         [id, name, icon]
       );
       const s = res.rows[0];
+      // Сразу добавляем создателя в участники~~
+      await pgPool.query(
+        'INSERT INTO server_members (server_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+        [id, userId]
+      );
       return { id: s.id, name: s.name, icon: s.icon, channels: [] };
     } else {
       const dbData = readDb();
       const newServer = { id, name, icon };
       if (!dbData.servers) dbData.servers = [];
       dbData.servers.push(newServer);
+      
+      if (!dbData.server_members) dbData.server_members = [];
+      dbData.server_members.push({ id: Date.now(), server_id: id, user_id: userId });
+
       writeDb(dbData);
       return { ...newServer, channels: [] };
     }
@@ -180,10 +211,14 @@ const db = {
     }
   },
 
-  // Получить список серверов и каналов~~
-  getServersAndChannels: async () => {
+  // Получить список серверов и каналов для юзера~~
+  getServersAndChannels: async (userId) => {
     if (isPostgres) {
-      const sRes = await pgPool.query('SELECT * FROM servers');
+      const sRes = await pgPool.query(`
+        SELECT s.* FROM servers s
+        JOIN server_members sm ON sm.server_id = s.id
+        WHERE sm.user_id = $1
+      `, [userId]);
       const cRes = await pgPool.query('SELECT * FROM channels');
       
       return sRes.rows.map(s => ({
@@ -198,7 +233,14 @@ const db = {
       }));
     } else {
       const dbData = readDb();
-      return dbData.servers.map(s => ({
+      if (!dbData.server_members) dbData.server_members = [];
+      const myServerIds = dbData.server_members
+        .filter(sm => sm.user_id === userId)
+        .map(sm => sm.server_id);
+
+      const filteredServers = (dbData.servers || []).filter(s => myServerIds.includes(s.id));
+
+      return filteredServers.map(s => ({
         id: s.id,
         name: s.name,
         icon: s.icon,
@@ -208,6 +250,33 @@ const db = {
           type: c.type
         }))
       }));
+    }
+  },
+
+  getServerById: async (id) => {
+    if (isPostgres) {
+      const res = await pgPool.query('SELECT * FROM servers WHERE id = $1', [id]);
+      return res.rows[0] || null;
+    } else {
+      const dbData = readDb();
+      return dbData.servers.find(s => s.id === id) || null;
+    }
+  },
+
+  addServerMember: async (serverId, userId) => {
+    if (isPostgres) {
+      await pgPool.query(
+        'INSERT INTO server_members (server_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+        [serverId, userId]
+      );
+    } else {
+      const dbData = readDb();
+      if (!dbData.server_members) dbData.server_members = [];
+      const exists = dbData.server_members.some(sm => sm.server_id === serverId && sm.user_id === userId);
+      if (!exists) {
+        dbData.server_members.push({ id: Date.now(), server_id: serverId, user_id: userId });
+        writeDb(dbData);
+      }
     }
   },
 
@@ -447,6 +516,42 @@ const db = {
       dbData.friends = dbData.friends.map(f => (f.user_id === userId && f.friend_username === friendUsername) ? { ...f, relation: 'blocked' } : f);
       writeDb(dbData);
     }
+  },
+
+  // получить список участников сервера из бд~~
+  getServerMembers: async (serverId) => {
+    if (isPostgres) {
+      const res = await pgPool.query(`
+        SELECT u.id, u.username, u.display_name, u.avatar_color, u.avatar_url, u.custom_status
+        FROM users u
+        JOIN server_members sm ON sm.user_id = u.id
+        WHERE sm.server_id = $1
+      `, [serverId]);
+      return res.rows.map(u => ({
+        id: u.id,
+        username: u.username,
+        displayName: u.display_name || u.username,
+        avatarColor: u.avatar_color,
+        avatarUrl: u.avatar_url || '',
+        customStatus: u.custom_status || ''
+      }));
+    } else {
+      const dbData = readDb();
+      if (!dbData.server_members) dbData.server_members = [];
+      const userIds = dbData.server_members
+        .filter(sm => sm.server_id === serverId)
+        .map(sm => sm.user_id);
+      return (dbData.users || [])
+        .filter(u => userIds.includes(u.id))
+        .map(u => ({
+          id: u.id,
+          username: u.username,
+          displayName: u.displayName || u.username,
+          avatarColor: u.avatarColor,
+          avatarUrl: u.avatarUrl || '',
+          customStatus: u.customStatus || ''
+        }));
+    }
   }
 };
 
@@ -595,7 +700,10 @@ const sendSocketToRoom = (roomId, eventName, data) => {
 // --- ЭНДПОИНТЫ СЕРВЕРОВ ---
 app.get('/api/servers', authenticateToken, async (req, res) => {
   try {
-    const list = await db.getServersAndChannels();
+    // Автоматически добавляем пользователя в Публичную Нору, если его там нет~~
+    await db.addServerMember('s_public_den', req.user.id);
+
+    const list = await db.getServersAndChannels(req.user.id);
     res.json(list);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -609,14 +717,86 @@ app.post('/api/servers', authenticateToken, async (req, res) => {
     return res.status(400).json({ error: 'укажите имя сервера и эмодзи-иконку, ня!' });
   }
   try {
-    const newServer = await db.addServer(name, icon);
+    const newServer = await db.addServer(name, icon, req.user.id);
     // автоматически создаем дефолтный текстовый канал "general" при создании сервера~~
     const defaultChannel = await db.addChannel(newServer.id, 'general', 'text');
     newServer.channels = [defaultChannel];
     
-    // оповещаем всех клиентов мгновенно~~
-    sendSseToAll('server', newServer);
+    // оповещаем создателя о создании нового сервера~~
+    sendSseToUser(req.user.username, 'server', { type: 'create', server: newServer });
     res.json(newServer);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Получить данные конкретного сервера~~
+app.get('/api/servers/:serverId', authenticateToken, async (req, res) => {
+  try {
+    const s = await db.getServerById(req.params.serverId);
+    if (!s) return res.status(404).json({ error: 'сервер не найден!' });
+    res.json(s);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Получить список участников конкретного сервера~~
+app.get('/api/servers/:serverId/members', authenticateToken, async (req, res) => {
+  try {
+    const { serverId } = req.params;
+    const members = await db.getServerMembers(serverId);
+    const enriched = members.map(m => {
+      const isOnline = io.sockets.adapter.rooms.has(`user_${m.username.toLowerCase()}`);
+      return {
+        ...m,
+        status: isOnline ? 'online' : 'offline'
+      };
+    });
+    res.json(enriched);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Присоединиться к server по его коду (ID)~~
+app.post('/api/servers/join', authenticateToken, async (req, res) => {
+  const { serverId } = req.body;
+  if (!serverId) return res.status(400).json({ error: 'укажите код сервера, ня!' });
+  
+  try {
+    const s = await db.getServerById(serverId);
+    if (!s) return res.status(404).json({ error: 'сервер с таким кодом не найден!' });
+
+    await db.addServerMember(serverId, req.user.id);
+    
+    // оповещаем пользователя по сокетам об обновлении списка серверов~~
+    sendSseToUser(req.user.username, 'server', { type: 'join', serverId });
+    // оповещаем всех участников об обновлении участников сервера~~
+    sendSseToAll('server_members', { serverId });
+    res.json({ success: true, message: 'успешно присоединились к серверу!' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Пригласить друга на сервер~~
+app.post('/api/servers/:serverId/invite', authenticateToken, async (req, res) => {
+  const { serverId } = req.params;
+  const { friendUsername } = req.body;
+  if (!friendUsername) return res.status(400).json({ error: 'укажите никнейм друга!' });
+  
+  try {
+    const friend = await db.getUserByUsername(friendUsername);
+    if (!friend) return res.status(404).json({ error: 'друг не найден!' });
+
+    await db.addServerMember(serverId, friend.id);
+    
+    // отправляем сокет-уведомление приглашенному другу~~
+    sendSseToUser(friendUsername, 'server', { type: 'invite', serverId });
+    // оповещаем всех участников об обновлении участников сервера~~
+    sendSseToAll('server_members', { serverId });
+    res.json({ success: true, message: 'приглашение успешно отправлено!' });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
