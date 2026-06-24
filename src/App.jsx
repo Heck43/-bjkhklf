@@ -79,7 +79,7 @@ function MemberBar() {
 // обертка для синхронизации роутов с Zustand стором~~
 function MainLayout() {
   const { serverId, channelId } = useParams();
-  const { setNavigation, friends, servers, isAuthenticated, fetchInitialData } = useStore();
+  const { setNavigation, friends, servers, isAuthenticated, fetchInitialData, fetchServers, fetchFriends } = useStore();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -89,6 +89,32 @@ function MainLayout() {
       fetchInitialData();
     }
   }, [isAuthenticated, navigate]);
+
+  // автоматическое фоновое обновление данных каждые 2.5 секунды, ня~~
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const interval = setInterval(() => {
+      fetchServers();
+      fetchFriends();
+      
+      const activeCh = useStore.getState().activeChannelId;
+      if (activeCh && activeCh !== 'friends') {
+        if (activeCh.startsWith('dm_')) {
+          const dmUser = useStore.getState().activeDmUser;
+          if (dmUser) {
+            const user = useStore.getState().userProfile;
+            const dmKey = 'dm_' + [user.username, dmUser.username].sort().join('_');
+            useStore.getState().fetchMessages(dmKey);
+          }
+        } else {
+          useStore.getState().fetchMessages(activeCh);
+        }
+      }
+    }, 2500);
+
+    return () => clearInterval(interval);
+  }, [isAuthenticated, fetchServers, fetchFriends]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
