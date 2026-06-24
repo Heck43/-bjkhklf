@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useStore } from '../store/useStore';
 import { useNavigate } from 'react-router-dom';
-import { Mic, MicOff, Headphones, Settings, Hash, Volume2, Users } from 'lucide-react';
+import { Mic, MicOff, Headphones, Settings, Hash, Volume2, Users, Plus, X } from 'lucide-react';
 
 // ууууу~~ а это наша боковая панелька!
 // тут живут каналы и личные переписки...
@@ -18,10 +18,16 @@ export default function Sidebar() {
     activeCall,
     startCall,
     toggleMute,
-    toggleDeafen
+    toggleDeafen,
+    createChannel
   } = useStore();
 
   const navigate = useNavigate();
+
+  // стейты для создания канала~~
+  const [showChannelModal, setShowChannelModal] = useState(false);
+  const [newChannelName, setNewChannelName] = useState('');
+  const [newChannelType, setNewChannelType] = useState('text'); // 'text' или 'voice'
 
   // ищем активный сервер, если он есть~~
   const activeServer = servers.find(s => s.id === activeServerId);
@@ -42,6 +48,28 @@ export default function Sidebar() {
   const handleDmUserClick = (friend) => {
     // переходим в личный чат с другом через роутер~~
     navigate(`/channels/@me/dm_${friend.id}`);
+  };
+
+  const handleCreateChannelClick = (type) => {
+    setNewChannelType(type);
+    setShowChannelModal(true);
+  };
+
+  const handleCreateChannelSubmit = async (e) => {
+    e.preventDefault();
+    if (!newChannelName.trim()) return;
+    const cleanName = newChannelName.trim().toLowerCase().replace(/\s+/g, '-');
+    const res = await createChannel(activeServerId, cleanName, newChannelType);
+    if (res.success && res.channel) {
+      setShowChannelModal(false);
+      setNewChannelName('');
+      if (newChannelType === 'text') {
+        navigate(`/channels/${activeServerId}/${res.channel.id}`);
+      } else {
+        startCall(res.channel.id, res.channel.name);
+        navigate(`/channels/${activeServerId}/${res.channel.id}`);
+      }
+    }
   };
 
   return (
@@ -87,10 +115,18 @@ export default function Sidebar() {
         ) : (
           <>
             {/* каналы на сервере, разделенные на категории текстовые/голосовые~~ */}
-            <div className="channel-category">
+            <div className="channel-category" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span>Текстовые каналы</span>
+              <button 
+                className="create-channel-btn" 
+                onClick={() => handleCreateChannelClick('text')}
+                title="Создать текстовый канал"
+                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 2 }}
+              >
+                <Plus size={14} />
+              </button>
             </div>
-            {activeServer.channels
+            {(activeServer.channels || [])
               .filter(c => c.type === 'text')
               .map(channel => (
                 <div
@@ -103,10 +139,18 @@ export default function Sidebar() {
                 </div>
               ))}
 
-            <div className="channel-category">
+            <div className="channel-category" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
               <span>Голосовые каналы</span>
+              <button 
+                className="create-channel-btn" 
+                onClick={() => handleCreateChannelClick('voice')}
+                title="Создать голосовой канал"
+                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 2 }}
+              >
+                <Plus size={14} />
+              </button>
             </div>
-            {activeServer.channels
+            {(activeServer.channels || [])
               .filter(c => c.type === 'voice')
               .map(channel => (
                 <div
@@ -162,6 +206,98 @@ export default function Sidebar() {
           </button>
         </div>
       </div>
+
+      {/* красивое модальное окно создания канала~~ */}
+      {showChannelModal && (
+        <div className="settings-overlay" onClick={() => setShowChannelModal(false)}>
+          <div className="settings-modal" style={{ width: 440 }} onClick={(e) => e.stopPropagation()}>
+            <div className="settings-header">
+              <span className="settings-title">Создать канал</span>
+              <button className="close-modal-btn" onClick={() => setShowChannelModal(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            
+            <form onSubmit={handleCreateChannelSubmit}>
+              <div className="settings-body" style={{ padding: '24px 20px' }}>
+                <div className="form-group">
+                  <label className="form-label">тип канала</label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', padding: '10px 14px', borderRadius: 8, backgroundColor: newChannelType === 'text' ? 'rgba(88, 101, 242, 0.15)' : 'var(--background-darkest)', border: newChannelType === 'text' ? '1px solid var(--discord-blurple)' : '1px solid transparent' }}>
+                      <input 
+                        type="radio" 
+                        name="channelType" 
+                        value="text" 
+                        checked={newChannelType === 'text'} 
+                        onChange={() => setNewChannelType('text')}
+                        style={{ display: 'none' }}
+                      />
+                      <Hash size={20} style={{ color: newChannelType === 'text' ? 'var(--discord-blurple)' : 'var(--text-muted)' }} />
+                      <div>
+                        <div style={{ fontWeight: 'bold', fontSize: 14 }}>Text</div>
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Отправляйте сообщения, изображения, мнения и эмодзи</div>
+                      </div>
+                    </label>
+
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', padding: '10px 14px', borderRadius: 8, backgroundColor: newChannelType === 'voice' ? 'rgba(88, 101, 242, 0.15)' : 'var(--background-darkest)', border: newChannelType === 'voice' ? '1px solid var(--discord-blurple)' : '1px solid transparent' }}>
+                      <input 
+                        type="radio" 
+                        name="channelType" 
+                        value="voice" 
+                        checked={newChannelType === 'voice'} 
+                        onChange={() => setNewChannelType('voice')}
+                        style={{ display: 'none' }}
+                      />
+                      <Volume2 size={20} style={{ color: newChannelType === 'voice' ? 'var(--discord-blurple)' : 'var(--text-muted)' }} />
+                      <div>
+                        <div style={{ fontWeight: 'bold', fontSize: 14 }}>Voice</div>
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Общайтесь голосом с демонстрацией экрана и видео</div>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="form-group" style={{ marginTop: 20 }}>
+                  <label className="form-label">название канала</label>
+                  <div style={{ position: 'relative' }}>
+                    <span style={{ position: 'absolute', left: 12, top: 10, color: 'var(--text-muted)' }}>
+                      {newChannelType === 'text' ? '#' : '🔊'}
+                    </span>
+                    <input
+                      type="text"
+                      className="form-input"
+                      style={{ paddingLeft: 30 }}
+                      placeholder="новый-канал"
+                      value={newChannelName}
+                      onChange={(e) => setNewChannelName(e.target.value)}
+                      required
+                      maxLength={30}
+                      autoFocus
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="settings-footer" style={{ padding: '16px 20px', display: 'flex', justifyContent: 'flex-end', gap: 12, backgroundColor: 'var(--background-darkest)' }}>
+                <button 
+                  type="button" 
+                  onClick={() => setShowChannelModal(false)}
+                  style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 14 }}
+                >
+                  Отмена
+                </button>
+                <button 
+                  type="submit" 
+                  className="add-friend-submit-btn" 
+                  style={{ padding: '8px 24px', borderRadius: 4, cursor: 'pointer', fontSize: 14 }}
+                >
+                  Создать канал
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

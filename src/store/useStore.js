@@ -220,8 +220,8 @@ export const useStore = create((set, get) => ({
     }
   },
 
-  // --- ОТПРАВКА СООБЩЕНИЙ С БОТОМ В БД ---
-
+  // --- ОТПРАВКА СООБЩЕНИЙ В БД ---
+  
   sendMessage: async (channelId, content, isDm = false) => {
     const user = get().userProfile;
     try {
@@ -245,20 +245,40 @@ export const useStore = create((set, get) => ({
           }
         };
       });
-
-      // 2. имитируем ответ бота, перечитывая сообщения из бд, ня!
-      const normalizedContent = content.toLowerCase();
-      if (!isDm && (normalizedContent.includes('привет') || normalizedContent.includes('hello') || normalizedContent.includes('femboy'))) {
-        setTimeout(async () => {
-          try {
-            await get().fetchMessages(channelId);
-          } catch (e) {
-            console.error('ошибка загрузки авто-ответа бота:', e);
-          }
-        }, 1600);
-      }
     } catch (e) {
       console.error('ошибка отправки сообщения:', e);
+    }
+  },
+
+  // --- СОЗДАНИЕ СЕРВЕРОВ И КАНАЛОВ В БД ---
+
+  createServer: async (name, icon) => {
+    try {
+      const newServer = await apiFetch('/api/servers', {
+        method: 'POST',
+        body: JSON.stringify({ name, icon })
+      });
+      // обновляем список серверов~~
+      await get().fetchServers();
+      return { success: true, server: newServer };
+    } catch (e) {
+      console.error('ошибка создания сервера:', e);
+      return { success: false, message: e.message };
+    }
+  },
+
+  createChannel: async (serverId, name, type) => {
+    try {
+      const newChannel = await apiFetch('/api/channels', {
+        method: 'POST',
+        body: JSON.stringify({ serverId, name, type })
+      });
+      // обновляем список серверов с каналами~~
+      await get().fetchServers();
+      return { success: true, channel: newChannel };
+    } catch (e) {
+      console.error('ошибка создания канала:', e);
+      return { success: false, message: e.message };
     }
   },
 

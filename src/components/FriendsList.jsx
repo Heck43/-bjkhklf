@@ -238,14 +238,6 @@ export default function FriendsList() {
               </div>
             )}
 
-            <div style={{ marginTop: 24 }}>
-              <h3 style={{ fontSize: 13, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 12 }}>Попробуйте ввести:</h3>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <span className="tab-item" onClick={() => setNewFriendName('cute_fox_guy')} style={{ cursor: 'pointer' }}>cute_fox_guy</span>
-                <span className="tab-item" onClick={() => setNewFriendName('daddy_dev')} style={{ cursor: 'pointer' }}>daddy_dev</span>
-                <span className="tab-item" onClick={() => setNewFriendName('fluffy_tail')} style={{ cursor: 'pointer' }}>fluffy_tail (уже есть)</span>
-              </div>
-            </div>
           </div>
         )}
       </div>

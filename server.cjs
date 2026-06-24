@@ -111,52 +111,55 @@ const db = {
           )
         `);
 
-        // Заполняем дефолтные серверы и каналы, если они пустые~~
-        const sCount = await client.query('SELECT COUNT(*) FROM servers');
-        if (parseInt(sCount.rows[0].count) === 0) {
-          await client.query("INSERT INTO servers (id, name, icon) VALUES ('s1', 'Gamer Fox Den', '🦊')");
-          await client.query("INSERT INTO servers (id, name, icon) VALUES ('s2', 'Coding Cafe', '☕')");
-          await client.query("INSERT INTO servers (id, name, icon) VALUES ('s3', 'Chill Lounge', '🌸')");
-
-          const cQ = "INSERT INTO channels (id, server_id, name, type) VALUES ($1, $2, $3, $4)";
-          await client.query(cQ, ['c1', 's1', 'general', 'text']);
-          await client.query(cQ, ['c2', 's1', 'memes', 'text']);
-          await client.query(cQ, ['c3', 's1', 'lounge', 'voice']);
-          await client.query(cQ, ['c4', 's1', 'gaming-1', 'voice']);
-          await client.query(cQ, ['c5', 's2', 'react-chat', 'text']);
-          await client.query(cQ, ['c6', 's2', 'bugs-and-fixes', 'text']);
-          await client.query(cQ, ['c7', 's2', 'voice-room', 'voice']);
-          await client.query(cQ, ['c8', 's3', 'welcome', 'text']);
-          await client.query(cQ, ['c9', 's3', 'music-box', 'voice']);
-          console.log('серверы и каналы успешно занесены в postgresql!');
-        }
       } finally {
         client.release();
       }
     } else {
       const dbData = readDb();
-      if (!dbData.servers || dbData.servers.length === 0) {
-        dbData.servers = [
-          { id: 's1', name: 'Gamer Fox Den', icon: '🦊' },
-          { id: 's2', name: 'Coding Cafe', icon: '☕' },
-          { id: 's3', name: 'Chill Lounge', icon: '🌸' }
-        ];
-      }
-      if (!dbData.channels || dbData.channels.length === 0) {
-        dbData.channels = [
-          { id: 'c1', server_id: 's1', name: 'general', type: 'text' },
-          { id: 'c2', server_id: 's1', name: 'memes', type: 'text' },
-          { id: 'c3', server_id: 's1', name: 'lounge', type: 'voice' },
-          { id: 'c4', server_id: 's1', name: 'gaming-1', type: 'voice' },
-          { id: 'c5', server_id: 's2', name: 'react-chat', type: 'text' },
-          { id: 'c6', server_id: 's2', name: 'bugs-and-fixes', type: 'text' },
-          { id: 'c7', server_id: 's2', name: 'voice-room', type: 'voice' },
-          { id: 'c8', server_id: 's3', name: 'welcome', type: 'text' },
-          { id: 'c9', server_id: 's3', name: 'music-box', type: 'voice' }
-        ];
-      }
+      if (!dbData.servers) dbData.servers = [];
+      if (!dbData.channels) dbData.channels = [];
       writeDb(dbData);
-      console.log('серверы и каналы успешно инициализированы в json бд!');
+      console.log('база данных json готова, сервера пустые, мяу!~~');
+    }
+  },
+
+  // Создать новый сервер в бд~~
+  addServer: async (name, icon) => {
+    const id = 's_' + Date.now() + Math.random().toString(36).substr(2, 5);
+    if (isPostgres) {
+      const res = await pgPool.query(
+        'INSERT INTO servers (id, name, icon) VALUES ($1, $2, $3) RETURNING *',
+        [id, name, icon]
+      );
+      const s = res.rows[0];
+      return { id: s.id, name: s.name, icon: s.icon, channels: [] };
+    } else {
+      const dbData = readDb();
+      const newServer = { id, name, icon };
+      if (!dbData.servers) dbData.servers = [];
+      dbData.servers.push(newServer);
+      writeDb(dbData);
+      return { ...newServer, channels: [] };
+    }
+  },
+
+  // Создать новый канал в бд~~
+  addChannel: async (serverId, name, type) => {
+    const id = 'c_' + Date.now() + Math.random().toString(36).substr(2, 5);
+    if (isPostgres) {
+      const res = await pgPool.query(
+        'INSERT INTO channels (id, server_id, name, type) VALUES ($1, $2, $3, $4) RETURNING *',
+        [id, serverId, name, type]
+      );
+      const c = res.rows[0];
+      return { id: c.id, server_id: c.server_id, name: c.name, type: c.type };
+    } else {
+      const dbData = readDb();
+      const newChannel = { id, server_id: serverId, name, type };
+      if (!dbData.channels) dbData.channels = [];
+      dbData.channels.push(newChannel);
+      writeDb(dbData);
+      return newChannel;
     }
   },
 
@@ -415,6 +418,37 @@ app.get('/api/servers', authenticateToken, async (req, res) => {
   }
 });
 
+// Создать новый сервер~~
+app.post('/api/servers', authenticateToken, async (req, res) => {
+  const { name, icon } = req.body;
+  if (!name || !icon) {
+    return res.status(400).json({ error: 'укажите имя сервера и эмодзи-иконку, ня!' });
+  }
+  try {
+    const newServer = await db.addServer(name, icon);
+    // автоматически создаем дефолтный текстовый канал "general" при создании сервера~~
+    const defaultChannel = await db.addChannel(newServer.id, 'general', 'text');
+    newServer.channels = [defaultChannel];
+    res.json(newServer);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Создать новый канал на сервере~~
+app.post('/api/channels', authenticateToken, async (req, res) => {
+  const { serverId, name, type } = req.body;
+  if (!serverId || !name || !type) {
+    return res.status(400).json({ error: 'укажите id сервера, название канала и его тип, ня!' });
+  }
+  try {
+    const newChannel = await db.addChannel(serverId, name, type);
+    res.json(newChannel);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- ЭНДПОИНТЫ АВТОРИЗАЦИИ ---
 
 // регистрация~~ (начальные друзья удалены, чтобы пользователи добавлялись сами!)
@@ -525,20 +559,6 @@ app.post('/api/messages', authenticateToken, async (req, res) => {
   try {
     const newMsg = await db.addMessage(channelId, req.user.username, content, timeStr, avatarColor);
     res.json(newMsg);
-
-    // авто-ответ бота на сообщения (только на серверах)~~
-    const normalizedContent = content.toLowerCase();
-    if (!channelId.startsWith('dm_') && (normalizedContent.includes('привет') || normalizedContent.includes('hello') || normalizedContent.includes('femboy'))) {
-      setTimeout(async () => {
-        try {
-          const botTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          const botText = 'привееет! мяууу~~ как твои дела? *виляет хвостиком* :3';
-          await db.addMessage(channelId, 'foxy_boi', botText, botTime, '#3BA55D');
-        } catch (err) {
-          console.error(err);
-        }
-      }, 1500);
-    }
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
