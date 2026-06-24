@@ -16,8 +16,11 @@ export default function ServerSettingsModal({ server, onClose }) {
   const [isSaving, setIsSaving] = useState(false);
 
   // только овнер или админ по-хорошему могут менять роли, но мы пока всем разрешим для демки, или только если ты не сам себе меняешь роль~~
-  const myRole = serverMembers.find(m => m.username === userProfile.username)?.role || 'member';
-  const canEditRoles = myRole === 'owner' || myRole === 'admin';
+  // оййй~~ проверяем наши права на редактирование ролей, чтобы никто не шалил~~
+  const myRole = (serverMembers.find(m => m.username === userProfile.username)?.role || 'member').toLowerCase();
+  const creatorMember = serverMembers.reduce((min, m) => (m.id < min.id ? m : min), serverMembers[0] || {});
+  const isCreator = userProfile.username === creatorMember.username;
+  const canEditRoles = isCreator || myRole === 'owner' || myRole === 'admin';
 
   const handleSaveOverview = async (e) => {
     e.preventDefault();
@@ -45,7 +48,7 @@ export default function ServerSettingsModal({ server, onClose }) {
 
   return (
     <div className="settings-overlay" onClick={onClose} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div className="settings-modal" style={{ width: 600, display: 'flex', height: 450, overflow: 'hidden' }} onClick={(e) => e.stopPropagation()}>
+      <div className="settings-modal" style={{ width: 720, display: 'flex', height: '80vh', minHeight: 480, maxHeight: 600, overflow: 'hidden' }} onClick={(e) => e.stopPropagation()}>
         
         {/* левое меню~~ */}
         <div style={{ width: 200, backgroundColor: 'var(--background-secondary)', padding: '20px 10px', display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -171,16 +174,30 @@ export default function ServerSettingsModal({ server, onClose }) {
                       </div>
 
                       <div>
-                        {canEditRoles && member.username !== userProfile.username ? (
-                          <select 
-                            value={member.role || 'member'} 
-                            onChange={(e) => handleRoleChange(member.id, e.target.value)}
-                            style={{ backgroundColor: 'var(--background-darkest)', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: 4, outline: 'none', cursor: 'pointer' }}
-                          >
-                            <option value="owner">Owner</option>
-                            <option value="admin">Admin</option>
-                            <option value="member">Member</option>
-                          </select>
+                        {canEditRoles ? (
+                          <input 
+                            type="text"
+                            defaultValue={member.role || 'Member'}
+                            onBlur={(e) => handleRoleChange(member.id, e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.target.blur();
+                              }
+                            }}
+                            style={{
+                              backgroundColor: 'var(--background-darkest)',
+                              color: '#fff',
+                              border: '1px solid rgba(255, 255, 255, 0.15)',
+                              padding: '6px 12px',
+                              borderRadius: 6,
+                              outline: 'none',
+                              fontSize: 13,
+                              width: 140,
+                              textAlign: 'left',
+                              transition: 'border-color 0.2s'
+                            }}
+                            placeholder="роль..."
+                          />
                         ) : (
                           <span style={{ fontSize: 12, color: 'var(--discord-blurple)', textTransform: 'uppercase', fontWeight: 'bold', padding: '6px 12px', backgroundColor: 'var(--background-darkest)', borderRadius: 4 }}>
                             {member.role || 'member'}
