@@ -218,6 +218,7 @@ export const useStore = create((set, get) => ({
         const mapped = participants.map(p => ({
           username: p.username,
           avatarColor: p.avatarColor,
+          avatarUrl: p.avatarUrl || '',
           isLocal: p.username === currentUser.username
         }));
         

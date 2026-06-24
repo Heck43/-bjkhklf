@@ -1,11 +1,10 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useStore } from '../store/useStore';
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, BarChart, Bar, Cell } from 'recharts';
 import { PhoneOff, Video, VideoOff, Monitor, MonitorOff, Mic, MicOff, Headphones, Wifi } from 'lucide-react';
 
 // ооооой, это же голосовой звоночек! 🔊
-// тут мы симулируем задержку сети и прыгающие уровни громкости с помощью графиков Recharts~~
-// посмотрите как бегают полосочки, у меня аж хвостик крутится от радости! ^w^ 🐾
+// тут мы выводим участников с аватарками и поддерживаем НАСТОЯЩУЮ трансляцию экрана!
+// посмотрите как круто работает, у меня аж ушки дрожат от восторга~~ ^w^ 🐾
 
 export default function VoiceCall() {
   const { 
@@ -14,18 +13,72 @@ export default function VoiceCall() {
     toggleMute, 
     toggleDeafen, 
     toggleCamera, 
-    toggleScreenShare,
-    updateCallStats
+    toggleScreenShare
   } = useStore();
 
-  useEffect(() => {
-    // обновляем статистику звонка каждую секунду для графиков Recharts~~
-    const interval = setInterval(() => {
-      updateCallStats();
-    }, 1000);
+  const [screenStream, setScreenStream] = useState(null);
+  const videoRef = useRef(null);
 
-    return () => clearInterval(interval);
-  }, [updateCallStats]);
+  // Следим за состоянием трансляции экрана и запрашиваем захват~~
+  const handleScreenShareClick = async () => {
+    if (!activeCall.isScreenSharing) {
+      try {
+        const stream = await navigator.mediaDevices.getDisplayMedia({ 
+          video: {
+            cursor: "always"
+          },
+          audio: false
+        });
+        setScreenStream(stream);
+        toggleScreenShare();
+
+        // Если пользователь остановил трансляцию через встроенную панель браузера~~
+        stream.getVideoTracks()[0].onended = () => {
+          stopCapture();
+        };
+      } catch (err) {
+        console.error("ошибка получения захвата экрана:", err);
+      }
+    } else {
+      stopCapture();
+    }
+  };
+
+  const stopCapture = () => {
+    if (screenStream) {
+      screenStream.getTracks().forEach(track => track.stop());
+      setScreenStream(null);
+    }
+    // сбрасываем флаг в Zustand сторе, если он еще активен~~
+    const state = useStore.getState().activeCall;
+    if (state && state.isScreenSharing) {
+      toggleScreenShare();
+    }
+  };
+
+  // Навешиваем поток на видео-плеер~~
+  useEffect(() => {
+    if (videoRef.current && screenStream) {
+      videoRef.current.srcObject = screenStream;
+    }
+  }, [screenStream]);
+
+  // Чистим поток при размонтировании звонка~~
+  useEffect(() => {
+    return () => {
+      if (screenStream) {
+        screenStream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [screenStream]);
+
+  // Если звонок отключили извне, тушим захват~~
+  useEffect(() => {
+    if (!activeCall && screenStream) {
+      screenStream.getTracks().forEach(track => track.stop());
+      setScreenStream(null);
+    }
+  }, [activeCall, screenStream]);
 
   if (!activeCall) {
     return (
@@ -37,16 +90,15 @@ export default function VoiceCall() {
     );
   }
 
-  // цвета для баров громкости участников звонка~~
-  const COLORS = ['#5865F2', '#23A55A', '#FAA81A', '#ED4245'];
+  const isSharing = activeCall.isScreenSharing && screenStream;
 
   return (
-    <div className="call-layout">
-      {/* шапка звонка~~ */}
-      <div className="call-header">
+    <div className="call-layout" style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      {/* Шапка звоночка */}
+      <div className="call-header" style={{ padding: '16px 20px', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div className="call-title">
           <span>Голосовой звонок: <b>{activeCall.channelName}</b></span>
-          <span className="call-badge">В эфире</span>
+          <span className="call-badge" style={{ marginLeft: 8, backgroundColor: 'var(--discord-red)', padding: '2px 6px', borderRadius: 4, fontSize: 10, color: 'white', fontWeight: 'bold' }}>В ЭФИРЕ</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--discord-green)', fontSize: 13, fontWeight: 500 }}>
           <Wifi size={16} />
@@ -54,146 +106,230 @@ export default function VoiceCall() {
         </div>
       </div>
 
-      {/* сетка участников~~ */}
-      <div className="participants-grid">
-        {activeCall.participants.map((p, idx) => {
-          // проверяем, "говорит" ли участник (если уровень звука > 30)~~
-          const audioLevel = activeCall.audioLevels?.find(al => al.name === p.username)?.level || 0;
-          const isSpeaking = audioLevel > 30;
-
-          return (
-            <div 
-              key={p.username} 
-              className={`participant-card ${isSpeaking ? 'speaking' : ''}`}
-            >
-              <div 
-                className="participant-avatar-container"
-                style={{ backgroundColor: p.avatarColor || '#72767d' }}
-              >
-                <div className="voice-ring" />
-                {p.username.substring(0, 2)}
-              </div>
-              <span className="participant-name">
-                {p.username} {p.isLocal ? '(Вы)' : ''}
-              </span>
-
-              {/* статусы камеры или демонстрации экрана~~ */}
-              <div className="participant-status-label">
-                {p.isLocal && activeCall.isCameraOn && (
-                  <span style={{ backgroundColor: 'var(--discord-green)', padding: '2px 6px', borderRadius: 4, fontSize: 10, color: 'white' }}>Камера</span>
-                )}
-                {p.isLocal && activeCall.isScreenSharing && (
-                  <span style={{ backgroundColor: 'var(--discord-blurple)', padding: '2px 6px', borderRadius: 4, fontSize: 10, color: 'white' }}>Экран</span>
-                )}
-              </div>
+      {/* Центральная область участников и стрима */}
+      {isSharing ? (
+        /* РЕЖИМ ТРАНСЛЯЦИИ ЭКРАНА (Слева стрим, Справа колонка участников) */
+        <div style={{ display: 'flex', flex: 1, gap: 16, minHeight: 0, padding: 16 }}>
+          {/* Стрим экрана */}
+          <div style={{
+            flex: 1,
+            backgroundColor: '#000',
+            borderRadius: 12,
+            overflow: 'hidden',
+            position: 'relative',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            border: '1px solid var(--glass-border)'
+          }}>
+            <video 
+              ref={videoRef} 
+              autoPlay 
+              playsInline 
+              muted 
+              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+            />
+            <div style={{
+              position: 'absolute',
+              bottom: 12,
+              left: 12,
+              backgroundColor: 'rgba(0,0,0,0.65)',
+              padding: '4px 10px',
+              borderRadius: 6,
+              color: '#fff',
+              fontSize: 12,
+              fontWeight: 'bold',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6
+            }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: 'var(--discord-red)' }}></span>
+              <span>Стрим экрана: @{activeCall.participants[0]?.username}</span>
             </div>
-          );
-        })}
-      </div>
+          </div>
 
-      {/* панель с графиками Recharts~~ */}
-      <div className="call-charts-section">
-        {/* график пинга (сетевой задержки)~~ */}
-        <div className="chart-card">
-          <span className="chart-title">Задержка сети (Ping Latency, ms)</span>
-          <div style={{ width: '100%', height: 180 }}>
-            <ResponsiveContainer>
-              <AreaChart data={activeCall.networkLatency} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="colorLatency" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="var(--discord-blurple)" stopOpacity={0.4}/>
-                    <stop offset="95%" stopColor="var(--discord-blurple)" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <XAxis dataKey="time" hide />
-                <YAxis domain={[0, 100]} stroke="var(--text-muted)" fontSize={11} />
-                <Tooltip 
-                  contentStyle={{ backgroundColor: 'var(--background-sidebar)', border: '1px solid var(--glass-border)', borderRadius: 4, fontSize: 12, color: 'var(--text-normal)' }}
-                  labelFormatter={() => 'Текущий пинг'}
-                />
-                <Area type="monotone" dataKey="ms" name="Пинг (мс)" stroke="var(--discord-blurple)" fillOpacity={1} fill="url(#colorLatency)" strokeWidth={2} />
-              </AreaChart>
-            </ResponsiveContainer>
+          {/* Список участников сбоку */}
+          <div style={{
+            width: 240,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 12,
+            overflowY: 'auto',
+            paddingRight: 4
+          }}>
+            {activeCall.participants.map((p) => {
+              const audioLevel = activeCall.audioLevels?.find(al => al.name === p.username)?.level || 0;
+              const isSpeaking = audioLevel > 30;
+
+              return (
+                <div 
+                  key={p.username} 
+                  className={`participant-card ${isSpeaking ? 'speaking' : ''}`}
+                  style={{
+                    height: 160,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: 'rgba(30,31,34,0.6)',
+                    borderRadius: 12,
+                    border: isSpeaking ? '2px solid var(--discord-green)' : '2px solid transparent',
+                    position: 'relative'
+                  }}
+                >
+                  <div 
+                    className="participant-avatar-container"
+                    style={{
+                      width: 64,
+                      height: 64,
+                      borderRadius: '50%',
+                      backgroundColor: p.avatarColor || '#72767d',
+                      position: 'relative',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 22,
+                      color: '#fff',
+                      fontWeight: 'bold',
+                      overflow: 'hidden'
+                    }}
+                  >
+                    {p.avatarUrl ? (
+                      <img src={p.avatarUrl} alt={p.username} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                    ) : (
+                      p.username.substring(0, 2)
+                    )}
+                  </div>
+                  <span style={{ fontSize: 13, fontWeight: 'bold', color: '#fff', marginTop: 10 }}>
+                    {p.username} {p.isLocal ? '(Вы)' : ''}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
+      ) : (
+        /* ОБЫЧНЫЙ ГРИД УЧАСТНИКОВ (Без графиков!) */
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, minHeight: 0 }}>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: activeCall.participants.length === 1 ? '1fr' : 'repeat(auto-fit, minmax(240px, 1fr))',
+            gap: 16,
+            width: '100%',
+            maxWidth: activeCall.participants.length === 1 ? '340px' : '900px',
+            alignItems: 'center'
+          }}>
+            {activeCall.participants.map((p) => {
+              const audioLevel = activeCall.audioLevels?.find(al => al.name === p.username)?.level || 0;
+              const isSpeaking = audioLevel > 30;
 
-        {/* график громкости участников звонка~~ */}
-        <div className="chart-card">
-          <span className="chart-title">Активность звука участников (Audio Levels)</span>
-          <div style={{ width: '100%', height: 180 }}>
-            <ResponsiveContainer>
-              <BarChart data={activeCall.audioLevels} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <XAxis dataKey="name" stroke="var(--text-muted)" fontSize={11} tickLine={false} />
-                <YAxis domain={[0, 100]} stroke="var(--text-muted)" fontSize={11} />
-                <Tooltip
-                  contentStyle={{ backgroundColor: 'var(--background-sidebar)', border: '1px solid var(--glass-border)', borderRadius: 4, fontSize: 12, color: 'var(--text-normal)' }}
-                  formatter={(value) => [`${Math.round(value)}%`, 'Громкость']}
-                />
-                <Bar dataKey="level" name="Громкость">
-                  {activeCall.audioLevels?.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+              return (
+                <div 
+                  key={p.username} 
+                  className={`participant-card ${isSpeaking ? 'speaking' : ''}`}
+                  style={{
+                    height: 240,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: 'rgba(30,31,34,0.6)',
+                    borderRadius: 12,
+                    border: isSpeaking ? '2px solid var(--discord-green)' : '2px solid transparent',
+                    position: 'relative'
+                  }}
+                >
+                  <div 
+                    className="participant-avatar-container"
+                    style={{
+                      width: 96,
+                      height: 96,
+                      borderRadius: '50%',
+                      backgroundColor: p.avatarColor || '#72767d',
+                      position: 'relative',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 32,
+                      color: '#fff',
+                      fontWeight: 'bold',
+                      overflow: 'hidden'
+                    }}
+                  >
+                    {p.avatarUrl ? (
+                      <img src={p.avatarUrl} alt={p.username} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                    ) : (
+                      p.username.substring(0, 2)
+                    )}
+                  </div>
+                  <span style={{ fontSize: 15, fontWeight: 'bold', color: '#fff', marginTop: 16 }}>
+                    {p.username} {p.isLocal ? '(Вы)' : ''}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
-      </div>
+      )}
 
-      {/* панель кнопок звонка снизу~~ */}
-      <div className="call-bar" style={{ borderRadius: 12, border: '1px solid var(--glass-border)' }}>
+      {/* Панель управления звонком снизу */}
+      <div className="call-bar" style={{ borderRadius: 12, border: '1px solid var(--glass-border)', margin: '0 16px 16px 16px', padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--background-servers)' }}>
         <div className="call-info-left">
-          <span className="call-status-text">
-            <span>●</span> Подключено к голосу
+          <span className="call-status-text" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--discord-green)', fontWeight: 'bold' }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: 'var(--discord-green)' }}></span>
+            Подключено к голосу
           </span>
-          <span className="call-channel-name">{activeCall.channelName} / Gamer Fox Den</span>
+          <span className="call-channel-name" style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{activeCall.channelName} / Gamer Fox Den</span>
         </div>
 
-        <div className="call-controls-center">
+        <div className="call-controls-center" style={{ display: 'flex', gap: 12 }}>
           <button 
             className={`call-btn ${activeCall.isMuted ? 'active' : ''}`}
             onClick={toggleMute}
             title={activeCall.isMuted ? "Включить микрофон" : "Выключить микрофон"}
+            style={{ width: 38, height: 38, borderRadius: '50%', border: 'none', backgroundColor: activeCall.isMuted ? 'var(--discord-red)' : 'var(--background-sidebar)', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justify: 'center' }}
           >
-            {activeCall.isMuted ? <MicOff size={18} /> : <Mic size={18} />}
+            {activeCall.isMuted ? <MicOff size={18} style={{ margin: 'auto' }} /> : <Mic size={18} style={{ margin: 'auto' }} />}
           </button>
           
           <button 
             className={`call-btn ${activeCall.isDeafened ? 'active' : ''}`}
             onClick={toggleDeafen}
             title={activeCall.isDeafened ? "Включить звук" : "Выключить звук"}
+            style={{ width: 38, height: 38, borderRadius: '50%', border: 'none', backgroundColor: activeCall.isDeafened ? 'var(--discord-red)' : 'var(--background-sidebar)', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justify: 'center' }}
           >
-            <Headphones size={18} />
+            <Headphones size={18} style={{ margin: 'auto' }} />
           </button>
 
           <button 
             className={`call-btn ${activeCall.isCameraOn ? 'active' : ''}`}
             onClick={toggleCamera}
             title={activeCall.isCameraOn ? "Выключить камеру" : "Включить камеру"}
-            style={{ backgroundColor: activeCall.isCameraOn ? 'var(--discord-green)' : '' }}
+            style={{ width: 38, height: 38, borderRadius: '50%', border: 'none', backgroundColor: activeCall.isCameraOn ? 'var(--discord-green)' : 'var(--background-sidebar)', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justify: 'center' }}
           >
-            {activeCall.isCameraOn ? <Video size={18} /> : <VideoOff size={18} />}
+            {activeCall.isCameraOn ? <Video size={18} style={{ margin: 'auto' }} /> : <VideoOff size={18} style={{ margin: 'auto' }} />}
           </button>
 
           <button 
             className={`call-btn ${activeCall.isScreenSharing ? 'active' : ''}`}
-            onClick={toggleScreenShare}
+            onClick={handleScreenShareClick}
             title={activeCall.isScreenSharing ? "Прекратить стрим" : "Начать трансляцию экрана"}
-            style={{ backgroundColor: activeCall.isScreenSharing ? 'var(--discord-green)' : '' }}
+            style={{ width: 38, height: 38, borderRadius: '50%', border: 'none', backgroundColor: activeCall.isScreenSharing ? 'var(--discord-green)' : 'var(--background-sidebar)', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justify: 'center' }}
           >
-            {activeCall.isScreenSharing ? <Monitor size={18} /> : <MonitorOff size={18} />}
+            {activeCall.isScreenSharing ? <Monitor size={18} style={{ margin: 'auto' }} /> : <MonitorOff size={18} style={{ margin: 'auto' }} />}
           </button>
 
           <button 
             className="call-btn hangup"
             onClick={endCall}
             title="Отключиться"
+            style={{ width: 38, height: 38, borderRadius: '50%', border: 'none', backgroundColor: 'var(--discord-red)', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justify: 'center' }}
           >
-            <PhoneOff size={18} />
+            <PhoneOff size={18} style={{ margin: 'auto' }} />
           </button>
         </div>
 
-        <div style={{ width: 150, textAlign: 'right', fontSize: 12, color: 'var(--text-muted)' }}>
+        <div style={{ width: 150, textAlign: 'right', fontSize: 11, color: 'var(--text-muted)' }}>
           Качество: HD 720p 30fps
         </div>
       </div>
