@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useStore } from '../store/useStore';
-import { X, Image as ImageIcon, Users } from 'lucide-react';
+import { X } from 'lucide-react';
 
 // оййй~~ тут мы настраиваем наш любимый сервачок!
 // меняем аватарки, роли раздаем друзьям... мррр! 🐾
@@ -9,6 +9,17 @@ export default function ServerSettingsModal({ server, onClose }) {
   const { updateServer, updateServerMemberRole, serverMembers, userProfile } = useStore();
   
   const [activeTab, setActiveTab] = useState('overview'); // 'overview' или 'members'
+
+  // закрываем настройки по ESC~~
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
   
   // стейты для обзора~~
   const [serverName, setServerName] = useState(server.name);
@@ -47,40 +58,38 @@ export default function ServerSettingsModal({ server, onClose }) {
   };
 
   return (
-    <div className="settings-overlay" onClick={onClose} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div className="settings-modal" style={{ width: 720, display: 'flex', height: '80vh', minHeight: 480, maxHeight: 600, overflow: 'hidden' }} onClick={(e) => e.stopPropagation()}>
+    <div className="settings-overlay">
+      <div className="settings-modal full-screen" onClick={(e) => e.stopPropagation()}>
         
-        {/* левое меню~~ */}
-        <div style={{ width: 200, backgroundColor: 'var(--background-secondary)', padding: '20px 10px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <div style={{ padding: '0 10px', fontSize: 12, fontWeight: 'bold', color: 'var(--text-muted)', marginBottom: 8 }}>
-            НАСТРОЙКИ СЕРВЕРА
-          </div>
+        {/* левое меню (сайдбар)~~ */}
+        <div className="settings-sidebar">
+          <div className="settings-sidebar-header">Настройки сервера</div>
           
           <div 
-            className={`settings-tab ${activeTab === 'overview' ? 'active' : ''}`}
+            className={`settings-sidebar-item ${activeTab === 'overview' ? 'active' : ''}`}
             onClick={() => setActiveTab('overview')}
-            style={{ padding: '8px 10px', borderRadius: 4, cursor: 'pointer', color: activeTab === 'overview' ? '#fff' : 'var(--text-muted)', backgroundColor: activeTab === 'overview' ? 'rgba(79, 84, 92, 0.32)' : 'transparent', display: 'flex', alignItems: 'center', gap: 8 }}
           >
-            <ImageIcon size={16} /> Обзор
+            Обзор
           </div>
           <div 
-            className={`settings-tab ${activeTab === 'members' ? 'active' : ''}`}
+            className={`settings-sidebar-item ${activeTab === 'members' ? 'active' : ''}`}
             onClick={() => setActiveTab('members')}
-            style={{ padding: '8px 10px', borderRadius: 4, cursor: 'pointer', color: activeTab === 'members' ? '#fff' : 'var(--text-muted)', backgroundColor: activeTab === 'members' ? 'rgba(79, 84, 92, 0.32)' : 'transparent', display: 'flex', alignItems: 'center', gap: 8 }}
           >
-            <Users size={16} /> Участники
+            Участники
           </div>
         </div>
 
         {/* правая часть с контентом~~ */}
-        <div style={{ flex: 1, backgroundColor: 'var(--background-primary)', display: 'flex', flexDirection: 'column', position: 'relative' }}>
-          <div style={{ position: 'absolute', top: 20, right: 20 }}>
-            <button className="close-modal-btn" onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
-              <X size={24} />
+        <div className="settings-content-wrapper">
+          {/* кнопка закрытия настроек в стиле Discord~~ */}
+          <div className="esc-btn-container">
+            <button className="esc-btn" onClick={onClose}>
+              <X size={18} />
             </button>
+            <span className="esc-btn-text">ESC</span>
           </div>
 
-          <div style={{ padding: '40px', overflowY: 'auto', flex: 1 }}>
+          <div className="settings-content-inner">
             {activeTab === 'overview' && (
               <form onSubmit={canEditRoles ? handleSaveOverview : (e) => e.preventDefault()}>
                 <h2 style={{ fontSize: 20, color: '#fff', marginBottom: 24, marginTop: 0 }}>Обзор сервера</h2>
