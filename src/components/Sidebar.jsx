@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useStore } from '../store/useStore';
 import { useNavigate } from 'react-router-dom';
 import { Mic, MicOff, Headphones, Settings, Hash, Volume2, Users, Plus, X, UserPlus } from 'lucide-react';
+import ServerSettingsModal from './ServerSettingsModal';
 
 // ууууу~~ а это наша боковая панелька!
 // тут живут каналы и личные переписки...
@@ -37,6 +38,9 @@ export default function Sidebar() {
   // стейты для приглашения друзей~~
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [invitingFriend, setInvitingFriend] = useState(null);
+
+  // стейт для настроек сервера~~
+  const [showServerSettings, setShowServerSettings] = useState(false);
 
   const handleInviteFriend = async (friendUsername) => {
     setInvitingFriend(friendUsername);
@@ -92,15 +96,26 @@ export default function Sidebar() {
       {/* верхний заголовок боковой панели~~ */}
       <div className="sidebar-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>{activeServer ? activeServer.name : 'Главная'}</span>
-        {activeServer && activeServer.id !== 's_public_den' && (
-          <button 
-            onClick={() => setShowInviteModal(true)}
-            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 4 }}
-            title="Пригласить друзей"
-          >
-            <UserPlus size={16} />
-          </button>
-        )}
+        <div style={{ display: 'flex', gap: 4 }}>
+          {activeServer && activeServer.id !== 's_public_den' && (
+            <button 
+              onClick={() => setShowInviteModal(true)}
+              style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 4 }}
+              title="Пригласить друзей"
+            >
+              <UserPlus size={16} />
+            </button>
+          )}
+          {activeServer && (
+            <button 
+              onClick={() => setShowServerSettings(true)}
+              style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 4 }}
+              title="Настройки сервера"
+            >
+              <Settings size={16} />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* список каналов или личных сообщений~~ */}
@@ -411,6 +426,14 @@ export default function Sidebar() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* модалочка настроек сервера~~ мяуу~~ */}
+      {showServerSettings && activeServer && (
+        <ServerSettingsModal 
+          server={activeServer} 
+          onClose={() => setShowServerSettings(false)} 
+        />
       )}
     </div>
   );

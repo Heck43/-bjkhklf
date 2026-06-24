@@ -489,6 +489,36 @@ export const useStore = create((set, get) => ({
     }
   },
 
+  updateServer: async (serverId, name, icon) => {
+    try {
+      const res = await apiFetch(`/api/servers/${serverId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ name, icon })
+      });
+      // оййй обновили сервачок~~ мяу! обновляем список серверов в сторе~~
+      await get().fetchServers();
+      return { success: true, message: res.message };
+    } catch (e) {
+      console.error('ошибка обновления сервера:', e);
+      return { success: false, message: e.message };
+    }
+  },
+
+  updateServerMemberRole: async (serverId, userId, role) => {
+    try {
+      const res = await apiFetch(`/api/servers/${serverId}/members/${userId}/role`, {
+        method: 'PUT',
+        body: JSON.stringify({ role })
+      });
+      // ууу поменяли роль лапке~~ теперь обновляем список участников сервера~~
+      await get().fetchServerMembers(serverId);
+      return { success: true, message: res.message };
+    } catch (e) {
+      console.error('ошибка обновления роли участника:', e);
+      return { success: false, message: e.message };
+    }
+  },
+
   joinServer: async (serverId) => {
     try {
       const res = await apiFetch('/api/servers/join', {

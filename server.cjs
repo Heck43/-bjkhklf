@@ -102,9 +102,17 @@ const db = {
             id SERIAL PRIMARY KEY,
             server_id VARCHAR(50) NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
             user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            role VARCHAR(50) DEFAULT 'Member',
             UNIQUE(server_id, user_id)
           )
         `);
+        // запуск миграций колонок для старых бд~~
+        try {
+          await client.query('ALTER TABLE servers ALTER COLUMN icon TYPE TEXT');
+          await client.query("ALTER TABLE server_members ADD COLUMN IF NOT EXISTS role VARCHAR(50) DEFAULT 'Member'");
+        } catch (e) {
+          console.log('ошибка при миграции колонок (вероятно, они уже существуют):', e.message);
+        }
         await client.query(`
           CREATE TABLE IF NOT EXISTS channels (
             id VARCHAR(50) PRIMARY KEY,
@@ -171,9 +179,9 @@ const db = {
         [id, name, icon]
       );
       const s = res.rows[0];
-      // Сразу добавляем создателя в участники~~
+      // Сразу добавляем создателя в участники с ролью Owner~~
       await pgPool.query(
-        'INSERT INTO server_members (server_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+        "INSERT INTO server_members (server_id, user_id, role) VALUES ($1, $2, 'Owner') ON CONFLICT DO NOTHING",
         [id, userId]
       );
       return { id: s.id, name: s.name, icon: s.icon, channels: [] };
@@ -184,7 +192,7 @@ const db = {
       dbData.servers.push(newServer);
       
       if (!dbData.server_members) dbData.server_members = [];
-      dbData.server_members.push({ id: Date.now(), server_id: id, user_id: userId });
+      dbData.server_members.push({ id: Date.now(), server_id: id, user_id: userId, role: 'Owner' });
 
       writeDb(dbData);
       return { ...newServer, channels: [] };
@@ -266,7 +274,7 @@ const db = {
   addServerMember: async (serverId, userId) => {
     if (isPostgres) {
       await pgPool.query(
-        'INSERT INTO server_members (server_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+        "INSERT INTO server_members (server_id, user_id, role) VALUES ($1, $2, 'Member') ON CONFLICT DO NOTHING",
         [serverId, userId]
       );
     } else {
@@ -274,7 +282,7 @@ const db = {
       if (!dbData.server_members) dbData.server_members = [];
       const exists = dbData.server_members.some(sm => sm.server_id === serverId && sm.user_id === userId);
       if (!exists) {
-        dbData.server_members.push({ id: Date.now(), server_id: serverId, user_id: userId });
+        dbData.server_members.push({ id: Date.now(), server_id: serverId, user_id: userId, role: 'Member' });
         writeDb(dbData);
       }
     }
@@ -522,7 +530,7 @@ const db = {
   getServerMembers: async (serverId) => {
     if (isPostgres) {
       const res = await pgPool.query(`
-        SELECT u.id, u.username, u.display_name, u.avatar_color, u.avatar_url, u.custom_status
+        SELECT u.id, u.username, u.display_name, u.avatar_color, u.avatar_url, u.custom_status, sm.role
         FROM users u
         JOIN server_members sm ON sm.user_id = u.id
         WHERE sm.server_id = $1
@@ -533,14 +541,20 @@ const db = {
         displayName: u.display_name || u.username,
         avatarColor: u.avatar_color,
         avatarUrl: u.avatar_url || '',
-        customStatus: u.custom_status || ''
+        customStatus: u.custom_status || '',
+        role: u.role || 'Member'
       }));
     } else {
       const dbData = readDb();
       if (!dbData.server_members) dbData.server_members = [];
-      const userIds = dbData.server_members
+      const membersMap = {};
+      dbData.server_members
         .filter(sm => sm.server_id === serverId)
-        .map(sm => sm.user_id);
+        .forEach(sm => {
+          membersMap[sm.user_id] = sm.role || 'Member';
+        });
+
+      const userIds = Object.keys(membersMap).map(Number);
       return (dbData.users || [])
         .filter(u => userIds.includes(u.id))
         .map(u => ({
@@ -549,7 +563,8 @@ const db = {
           displayName: u.displayName || u.username,
           avatarColor: u.avatarColor,
           avatarUrl: u.avatarUrl || '',
-          customStatus: u.customStatus || ''
+          customStatus: u.customStatus || '',
+          role: membersMap[u.id] || 'Member'
         }));
     }
   }
@@ -736,6 +751,64 @@ app.get('/api/servers/:serverId', authenticateToken, async (req, res) => {
     const s = await db.getServerById(req.params.serverId);
     if (!s) return res.status(404).json({ error: 'сервер не найден!' });
     res.json(s);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Обновить настройки сервера (имя, иконка/аватарка)~~
+app.put('/api/servers/:serverId', authenticateToken, async (req, res) => {
+  const { serverId } = req.params;
+  const { name, icon } = req.body;
+  
+  try {
+    if (isPostgres) {
+      await pgPool.query(
+        'UPDATE servers SET name = $1, icon = $2 WHERE id = $3',
+        [name, icon, serverId]
+      );
+    } else {
+      const dbData = readDb();
+      const serverIndex = dbData.servers.findIndex(s => s.id === serverId);
+      if (serverIndex !== -1) {
+        dbData.servers[serverIndex].name = name;
+        dbData.servers[serverIndex].icon = icon;
+        writeDb(dbData);
+      }
+    }
+    
+    // оповещаем сокеты об обновлении серверов для всех участников~~
+    sendSseToAll('server', { type: 'update', serverId });
+    res.json({ success: true, message: 'сервер успешно обновлен!' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Обновить роль участника сервера~~
+app.put('/api/servers/:serverId/members/:userId/role', authenticateToken, async (req, res) => {
+  const { serverId, userId } = req.params;
+  const { role } = req.body;
+  
+  try {
+    if (isPostgres) {
+      await pgPool.query(
+        'UPDATE server_members SET role = $1 WHERE server_id = $2 AND user_id = $3',
+        [role, serverId, userId]
+      );
+    } else {
+      const dbData = readDb();
+      if (!dbData.server_members) dbData.server_members = [];
+      const memberIndex = dbData.server_members.findIndex(sm => sm.server_id === serverId && sm.user_id === Number(userId));
+      if (memberIndex !== -1) {
+        dbData.server_members[memberIndex].role = role;
+        writeDb(dbData);
+      }
+    }
+    
+    // Оповещаем участников об обновлении списка участников (включая их роли!)~~
+    sendSseToAll('server_members', { serverId });
+    res.json({ success: true, message: 'роль успешно обновлена!' });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
