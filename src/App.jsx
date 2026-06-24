@@ -7,6 +7,7 @@ import Sidebar from './components/Sidebar';
 import FriendsList from './components/FriendsList';
 import ChatArea from './components/ChatArea';
 import VoiceCall from './components/VoiceCall';
+import VoiceCallManager from './components/VoiceCallManager';
 import UserSettings from './components/UserSettings';
 import UserProfileModal from './components/UserProfileModal';
 import Auth from './pages/Auth';
@@ -143,7 +144,7 @@ function MemberBar() {
 // обертка для синхронизации роутов с Zustand стором~~
 function MainLayout() {
   const { serverId, channelId } = useParams();
-  const { setNavigation, friends, servers, isAuthenticated, fetchInitialData } = useStore();
+  const { setNavigation, friends, servers, isAuthenticated, fetchInitialData, activeCall } = useStore();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -201,6 +202,7 @@ function MainLayout() {
 
   return (
     <div className="app-container">
+      {activeCall && <VoiceCallManager />}
       {/* 1. Левая панель серверов */}
       <ServerBar />
 

@@ -55,6 +55,9 @@ export const useStore = create((set, get) => ({
   
   // голосовые звонки~~
   activeCall: null,
+  localStream: null,
+  remoteStream: null,
+  voiceStates: {}, // { channelId: [participants] }
   
   // настройки~~
   settingsOpen: false,
@@ -208,15 +211,11 @@ export const useStore = create((set, get) => ({
       }
     });
 
-    socket.on('voice_state_update', (data) => {
-      const { channelId, participants } = data;
+    socket.on('voice_states_sync', (states) => {
       const currentUser = get().userProfile;
-      const activeCall = get().activeCall;
-
-      if (activeCall && activeCall.channelId === channelId) {
-        // маппим участников с флагом isLocal и состояниями для текущего пользователя~~
-        // няняня~~ добавляем socketId, чтобы WebRTC знал, куда слать офферы! 🌸
-        const mapped = participants.map(p => ({
+      const synced = {};
+      for (const channelId in states) {
+        synced[channelId] = states[channelId].map(p => ({
           username: p.username,
           socketId: p.socketId,
           avatarColor: p.avatarColor,
@@ -227,7 +226,36 @@ export const useStore = create((set, get) => ({
           isCameraOn: p.isCameraOn || false,
           isScreenSharing: p.isScreenSharing || false
         }));
-        
+      }
+      set({ voiceStates: synced });
+    });
+
+    socket.on('voice_state_update', (data) => {
+      const { channelId, participants } = data;
+      const currentUser = get().userProfile;
+
+      const mapped = participants.map(p => ({
+        username: p.username,
+        socketId: p.socketId,
+        avatarColor: p.avatarColor,
+        avatarUrl: p.avatarUrl || '',
+        isLocal: p.username === currentUser.username,
+        isMuted: p.isMuted || false,
+        isDeafened: p.isDeafened || false,
+        isCameraOn: p.isCameraOn || false,
+        isScreenSharing: p.isScreenSharing || false
+      }));
+
+      // сохраняем список участников канала в глобальную мапу для сайдбара~~ 🐾
+      set(state => ({
+        voiceStates: {
+          ...state.voiceStates,
+          [channelId]: mapped
+        }
+      }));
+
+      const activeCall = get().activeCall;
+      if (activeCall && activeCall.channelId === channelId) {
         const screenSharer = mapped.find(p => p.isScreenSharing);
         
         set({
@@ -656,12 +684,53 @@ export const useStore = create((set, get) => ({
     set({ activeCall: callData, activeChannelId: channelId });
   },
 
+  setLocalStream: (stream) => set({ localStream: stream }),
+  setRemoteStream: (stream) => set({ remoteStream: stream }),
+
+  startScreenShare: async () => {
+    try {
+      // запрашиваем захват экранчика у браузера~~ 🖥️
+      const stream = await navigator.mediaDevices.getDisplayMedia({ 
+        video: {
+          cursor: "always"
+        },
+        audio: false
+      });
+      get().setLocalStream(stream);
+      get().toggleScreenShare();
+
+      // если котик остановил стрим через панельку хрома/браузера~~
+      stream.getVideoTracks()[0].onended = () => {
+        get().stopScreenShare();
+      };
+    } catch (err) {
+      console.error("ошибка захвата экрана в сторе:", err);
+    }
+  },
+
+  stopScreenShare: () => {
+    const { localStream, activeCall } = get();
+    if (localStream) {
+      localStream.getTracks().forEach(track => track.stop());
+      get().setLocalStream(null);
+    }
+    const localPart = activeCall?.participants?.find(p => p.isLocal);
+    if (localPart && localPart.isScreenSharing) {
+      get().toggleScreenShare();
+    }
+  },
+
   endCall: () => {
     const socket = get().socket;
     if (socket) {
       socket.emit('leave_voice');
     }
-    set({ activeCall: null });
+    // гасим наши стримы при выходе из звоночка, мяу~~ 🐾
+    const { localStream } = get();
+    if (localStream) {
+      localStream.getTracks().forEach(track => track.stop());
+    }
+    set({ activeCall: null, localStream: null, remoteStream: null });
   },
 
   toggleMute: () => {

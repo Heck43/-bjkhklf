@@ -229,6 +229,9 @@ export default function ChatArea() {
           style={{
             maxWidth: '100%',
             maxHeight: '300px',
+            width: 'auto',
+            height: 'auto',
+            objectFit: 'contain',
             borderRadius: '8px',
             marginTop: '8px',
             border: '1px solid var(--glass-border)',

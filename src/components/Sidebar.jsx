@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useStore } from '../store/useStore';
 import { useNavigate } from 'react-router-dom';
-import { Mic, MicOff, Headphones, Settings, Hash, Volume2, Users, Plus, X, UserPlus } from 'lucide-react';
+import { Mic, MicOff, Headphones, Settings, Hash, Volume2, Users, Plus, X, UserPlus, PhoneOff } from 'lucide-react';
 import ServerSettingsModal from './ServerSettingsModal';
 
 // ууууу~~ а это наша боковая панелька!
@@ -25,7 +25,9 @@ export default function Sidebar() {
     createChannel,
     inviteFriendToServer,
     viewUserProfile,
-    unreadCounts
+    unreadCounts,
+    voiceStates,
+    endCall
   } = useStore();
 
   const navigate = useNavigate();
@@ -210,19 +212,110 @@ export default function Sidebar() {
             </div>
             {(activeServer.channels || [])
               .filter(c => c.type === 'voice')
-              .map(channel => (
-                <div
-                  key={channel.id}
-                  className={`channel-item ${activeChannelId === channel.id ? 'active' : ''}`}
-                  onClick={() => handleChannelClick(channel)}
-                >
-                  <Volume2 size={18} />
-                  <span className="channel-name">{channel.name}</span>
-                </div>
-              ))}
+              .map(channel => {
+                const channelUsers = voiceStates[channel.id] || [];
+                return (
+                  <div key={channel.id} className="voice-channel-container">
+                    <div
+                      className={`channel-item ${activeChannelId === channel.id ? 'active' : ''}`}
+                      onClick={() => handleChannelClick(channel)}
+                    >
+                      <Volume2 size={18} />
+                      <span className="channel-name">{channel.name}</span>
+                    </div>
+                    {channelUsers.length > 0 && (
+                      <div className="voice-channel-users" style={{ paddingLeft: 24, marginTop: 4, marginBottom: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {channelUsers.map(user => (
+                          <div key={user.username} className="voice-user-item" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-muted)' }}>
+                            <div className="avatar-mini" style={{
+                              width: 18,
+                              height: 18,
+                              borderRadius: '50%',
+                              backgroundColor: user.avatarColor || '#72767d',
+                              fontSize: 9,
+                              color: '#fff',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontWeight: 'bold',
+                              overflow: 'hidden'
+                            }}>
+                              {user.avatarUrl ? (
+                                <img src={user.avatarUrl} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              ) : (
+                                user.username.substring(0, 2).toUpperCase()
+                              )}
+                            </div>
+                            <span className="username" style={{ color: 'var(--text-muted)', fontSize: 12 }}>{user.username}</span>
+                            {user.isDeafened ? (
+                              <Headphones size={12} style={{ color: 'var(--discord-red)', marginLeft: 'auto' }} />
+                            ) : user.isMuted ? (
+                              <MicOff size={12} style={{ color: 'var(--discord-red)', marginLeft: 'auto' }} />
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
           </>
         )}
       </div>
+
+      {/* Панель активного звонка, если мы подключены к голосу~~ */}
+      {activeCall && (
+        <div className="voice-connected-panel" style={{
+          padding: '10px 12px',
+          borderBottom: '1px solid var(--glass-border)',
+          backgroundColor: 'rgba(35, 165, 90, 0.08)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 6
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--discord-green)', fontSize: 13, fontWeight: 'bold' }}>
+              <span className="pulse-dot" style={{
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                backgroundColor: 'var(--discord-green)',
+                display: 'inline-block'
+              }} />
+              <span>Голос подключен</span>
+            </div>
+            <button 
+              onClick={() => {
+                endCall();
+              }}
+              title="Отключиться от звонка"
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--discord-red)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                padding: 4,
+                borderRadius: 4
+              }}
+            >
+              <PhoneOff size={16} />
+            </button>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span 
+              onClick={() => {
+                navigate(`/channels/${activeServerId || '@me'}/${activeCall.channelId}`);
+              }}
+              style={{ fontSize: 11, color: 'var(--text-muted)', cursor: 'pointer', textDecoration: 'underline' }}
+              title="Открыть звонок"
+            >
+              {activeCall.channelName} / Gamer Fox Den
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* нижняя панель с профилем пользователя~~ */}
       <div className="user-panel">
