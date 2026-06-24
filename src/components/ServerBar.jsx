@@ -108,8 +108,12 @@ export default function ServerBar() {
             title={server.name}
           >
             <div className="server-pill" />
-            <div className="server-icon">
-              {server.icon}
+            <div className="server-icon" style={{ overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {server.icon && (server.icon.startsWith('data:image/') || server.icon.startsWith('http')) ? (
+                <img src={server.icon} alt={server.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : (
+                server.icon || server.name[0] || '?'
+              )}
               {serverUnreadCount > 0 && (
                 <div className="unread-badge">{serverUnreadCount}</div>
               )}

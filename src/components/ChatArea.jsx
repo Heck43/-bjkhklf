@@ -105,9 +105,14 @@ function ServerInviteCard({ serverId }) {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontSize: 24
+          fontSize: 24,
+          overflow: 'hidden'
         }}>
-          {serverInfo.icon || '🦊'}
+          {serverInfo.icon && (serverInfo.icon.startsWith('data:image/') || serverInfo.icon.startsWith('http')) ? (
+            <img src={serverInfo.icon} alt={serverInfo.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          ) : (
+            serverInfo.icon || '🦊'
+          )}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           <span style={{ fontSize: 10, fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
