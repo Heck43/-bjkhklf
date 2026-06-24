@@ -712,6 +712,15 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Сигналинг для WebRTC (трансляция экрана)~~
+  socket.on('webrtc_signal', (data) => {
+    const { targetSocketId, signalData } = data;
+    io.to(targetSocketId).emit('webrtc_signal', {
+      senderSocketId: socket.id,
+      signalData
+    });
+  });
+
   // Выход из голосового канала~~
   socket.on('leave_voice', () => {
     leaveVoice(socket);
