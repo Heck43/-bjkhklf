@@ -96,7 +96,7 @@ export default function ChatArea() {
           {chatMessages.length === 0 && (
             <div className="welcome-chat-info" style={{ height: 'auto', padding: '20px 0' }}>
               <span className="welcome-logo">{isDm ? '💬' : '👋'}</span>
-              <span className="welcome-title">Добро пожаловать в #{channelName}!</span>
+              <span className="welcome-title">{isDm ? `Добро пожаловать в личный чат с ${channelName}!` : `Добро пожаловать в #${channelName}!`}</span>
               <span className="welcome-desc">Напишите первое сообщение, чтобы начать беседу!</span>
             </div>
           )}

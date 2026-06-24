@@ -7,6 +7,7 @@ import FriendsList from './components/FriendsList';
 import ChatArea from './components/ChatArea';
 import VoiceCall from './components/VoiceCall';
 import UserSettings from './components/UserSettings';
+import Auth from './pages/Auth';
 
 // мяууу~~ вот наш главный компонент приложения!
 // тут собираются все панельки вместе, настраивается роутинг и синхронизация с URL! 🐾
@@ -78,10 +79,19 @@ function MemberBar() {
 // обертка для синхронизации роутов с Zustand стором~~
 function MainLayout() {
   const { serverId, channelId } = useParams();
-  const { setNavigation, friends, servers } = useStore();
+  const { setNavigation, friends, servers, isAuthenticated, fetchInitialData } = useStore();
   const navigate = useNavigate();
 
   useEffect(() => {
+    if (!isAuthenticated) {
+      navigate('/auth', { replace: true });
+    } else {
+      fetchInitialData();
+    }
+  }, [isAuthenticated, navigate]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
     // синхронизируем URL со стором, ня!
     if (serverId === '@me' || !serverId) {
       if (!channelId || channelId === 'friends') {
@@ -158,6 +168,7 @@ function MainLayout() {
 export default function App() {
   return (
     <Routes>
+      <Route path="/auth" element={<Auth />} />
       {/* редирект с корня на список друзей, мяу! */}
       <Route path="/" element={<Navigate to="/channels/@me/friends" replace />} />
       <Route path="/channels/@me" element={<Navigate to="/channels/@me/friends" replace />} />

@@ -1266,3 +1266,129 @@ body {
   max-width: 400px;
   line-height: 1.5;
 }
+
+/* стили для страницы авторизации (login/register)~~ */
+.auth-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100vw;
+  height: 100vh;
+  background: radial-gradient(circle at center, #2b2d31, #111214);
+  position: relative;
+  overflow: hidden;
+}
+
+.auth-card {
+  display: flex;
+  background-color: var(--background-sidebar);
+  border-radius: 8px;
+  padding: 32px;
+  width: 780px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--glass-border);
+  gap: 32px;
+  transition: all 0.3s ease;
+}
+
+.auth-column-form {
+  flex: 1.2;
+  display: flex;
+  flex-direction: column;
+}
+
+.auth-column-qr {
+  flex: 0.8;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-left: 1px solid rgba(255, 255, 255, 0.05);
+  padding-left: 32px;
+}
+
+.auth-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--header-primary);
+  margin-bottom: 8px;
+  text-align: center;
+}
+
+.auth-subtitle {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.auth-qr-box {
+  background-color: white;
+  padding: 12px;
+  border-radius: 8px;
+  width: 160px;
+  height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.auth-qr-placeholder {
+  width: 100%;
+  height: 100%;
+  background: repeating-conic-gradient(from 0deg, #111 0deg 90deg, #fff 90deg 180deg) 0 0/16px 16px;
+  opacity: 0.15;
+  border-radius: 4px;
+}
+
+.auth-qr-logo {
+  position: absolute;
+  font-size: 36px;
+  background-color: var(--background-sidebar);
+  border-radius: 50%;
+  width: 54px;
+  height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 4px solid white;
+}
+
+.auth-qr-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--header-primary);
+  margin-top: 16px;
+  margin-bottom: 4px;
+  text-align: center;
+}
+
+.auth-qr-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  line-height: 1.4;
+}
+
+.auth-link {
+  color: var(--text-link);
+  font-size: 13px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.auth-link:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 768px) {
+  .auth-card {
+    width: 440px;
+    flex-direction: column;
+  }
+  .auth-column-qr {
+    display: none;
+  }
+}

@@ -27,7 +27,7 @@ const AVATAR_COLORS = ['#ff8da1', '#5865F2', '#3BA55D', '#FAA81A', '#ED4245', '#
 const ACCENT_COLORS = ['#ff2d55', '#4752c4', '#1f7e43', '#c68412', '#b83236', '#8e44ad'];
 
 export default function UserSettings() {
-  const { userProfile, updateUserProfile, settingsOpen, setSettingsOpen } = useStore();
+  const { userProfile, updateUserProfile, settingsOpen, setSettingsOpen, logout } = useStore();
 
   const {
     register,
@@ -158,8 +158,15 @@ export default function UserSettings() {
 
           </div>
 
-          {/* подвал формы с кнопками отправки~~ */}
           <div className="settings-footer">
+            <button 
+              type="button" 
+              className="btn-secondary" 
+              style={{ color: 'var(--discord-red)', marginRight: 'auto' }} 
+              onClick={() => { logout(); setSettingsOpen(false); }}
+            >
+              Выйти из аккаунта
+            </button>
             <button type="button" className="btn-secondary" onClick={() => setSettingsOpen(false)}>
               Отмена
             </button>
