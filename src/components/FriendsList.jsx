@@ -17,13 +17,13 @@ export default function FriendsList() {
   const [newFriendName, setNewFriendName] = useState('');
   const [alert, setAlert] = useState({ show: false, type: '', message: '' });
 
-  const handleAddFriendSubmit = (e) => {
+  const handleAddFriendSubmit = async (e) => {
     e.preventDefault();
     if (!newFriendName.trim()) {
       setAlert({ show: true, type: 'error', message: 'введи имя пользователя, ня!' });
       return;
     }
-    const res = addFriend(newFriendName.trim());
+    const res = await addFriend(newFriendName.trim());
     if (res.success) {
       setAlert({ show: true, type: 'success', message: res.message });
       setNewFriendName('');
