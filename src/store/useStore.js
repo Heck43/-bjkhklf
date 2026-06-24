@@ -215,8 +215,10 @@ export const useStore = create((set, get) => ({
 
       if (activeCall && activeCall.channelId === channelId) {
         // маппим участников с флагом isLocal и состояниями для текущего пользователя~~
+        // няняня~~ добавляем socketId, чтобы WebRTC знал, куда слать офферы! 🌸
         const mapped = participants.map(p => ({
           username: p.username,
+          socketId: p.socketId,
           avatarColor: p.avatarColor,
           avatarUrl: p.avatarUrl || '',
           isLocal: p.username === currentUser.username,
@@ -671,11 +673,13 @@ export const useStore = create((set, get) => ({
       } : null;
 
       if (state.socket && state.activeCall) {
+        // оййй~~ получаем локального котика, чтобы не портить чужие статусы трансляции! 🐾
+        const localPart = state.activeCall.participants?.find(p => p.isLocal);
         state.socket.emit('update_voice_state', {
           isMuted: newMuted,
           isDeafened: state.isDeafened,
-          isCameraOn: state.activeCall.isCameraOn,
-          isScreenSharing: state.activeCall.isScreenSharing
+          isCameraOn: localPart ? localPart.isCameraOn : false,
+          isScreenSharing: localPart ? localPart.isScreenSharing : false
         });
       }
 
@@ -697,11 +701,12 @@ export const useStore = create((set, get) => ({
       } : null;
 
       if (state.socket && state.activeCall) {
+        const localPart = state.activeCall.participants?.find(p => p.isLocal);
         state.socket.emit('update_voice_state', {
           isMuted: newMuted,
           isDeafened: newDeafened,
-          isCameraOn: state.activeCall.isCameraOn,
-          isScreenSharing: state.activeCall.isScreenSharing
+          isCameraOn: localPart ? localPart.isCameraOn : false,
+          isScreenSharing: localPart ? localPart.isScreenSharing : false
         });
       }
 
@@ -716,21 +721,26 @@ export const useStore = create((set, get) => ({
   toggleCamera: () => {
     set((state) => {
       if (!state.activeCall) return {};
-      const newCameraOn = !state.activeCall.isCameraOn;
+      const localPart = state.activeCall.participants?.find(p => p.isLocal);
+      const newCameraOn = localPart ? !localPart.isCameraOn : true;
 
       if (state.socket) {
         state.socket.emit('update_voice_state', {
           isMuted: state.isMuted,
           isDeafened: state.isDeafened,
           isCameraOn: newCameraOn,
-          isScreenSharing: state.activeCall.isScreenSharing
+          isScreenSharing: localPart ? localPart.isScreenSharing : false
         });
       }
+
+      const updatedParticipants = state.activeCall.participants?.map(p => 
+        p.isLocal ? { ...p, isCameraOn: newCameraOn } : p
+      );
 
       return {
         activeCall: {
           ...state.activeCall,
-          isCameraOn: newCameraOn
+          participants: updatedParticipants
         }
       };
     });
@@ -739,21 +749,26 @@ export const useStore = create((set, get) => ({
   toggleScreenShare: () => {
     set((state) => {
       if (!state.activeCall) return {};
-      const newScreenSharing = !state.activeCall.isScreenSharing;
+      const localPart = state.activeCall.participants?.find(p => p.isLocal);
+      const newScreenSharing = localPart ? !localPart.isScreenSharing : true;
 
       if (state.socket) {
         state.socket.emit('update_voice_state', {
           isMuted: state.isMuted,
           isDeafened: state.isDeafened,
-          isCameraOn: state.activeCall.isCameraOn,
+          isCameraOn: localPart ? localPart.isCameraOn : false,
           isScreenSharing: newScreenSharing
         });
       }
 
+      const updatedParticipants = state.activeCall.participants?.map(p => 
+        p.isLocal ? { ...p, isScreenSharing: newScreenSharing } : p
+      );
+
       return {
         activeCall: {
           ...state.activeCall,
-          isScreenSharing: newScreenSharing
+          participants: updatedParticipants
         }
       };
     });

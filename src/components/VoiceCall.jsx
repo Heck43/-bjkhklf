@@ -137,12 +137,24 @@ export default function VoiceCall() {
   const [screenStream, setScreenStream] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
   
-  const videoRef = useRef(null);
+  const localVideoRef = useRef(null);
+  const remoteVideoRef = useRef(null);
   const pcsRef = useRef({}); // { remoteSocketId: RTCPeerConnection }
+
+  // сохраняем наш локальный стрим в реф, чтобы не поймать устаревшие замыкания в сокетах~~ 🌸
+  const screenStreamRef = useRef(null);
+  useEffect(() => {
+    screenStreamRef.current = screenStream;
+  }, [screenStream]);
 
   // 1. Инициируем WebRTC-соединение на стороне зрителя~~
   useEffect(() => {
     if (!socket || !activeCall) return;
+
+    // если мы сами транслируем экран — ничего не делаем, мы сторона-отправитель!
+    // иначе мы случайно закроем все соединения к нашим зрителям~~ мррр! 🐾
+    const isLocalSharing = activeCall.participants?.some(p => p.isScreenSharing && p.isLocal);
+    if (isLocalSharing) return;
 
     // ищем стримера (кто-то другой, не мы)~~
     const sharer = activeCall.participants?.find(p => p.isScreenSharing && !p.isLocal);
@@ -196,7 +208,7 @@ export default function VoiceCall() {
 
   // 2. Обрабатываем сигналы WebRTC на стороне стримера и зрителя~~
   useEffect(() => {
-    if (!socket || !activeCall) return;
+    if (!socket) return;
 
     const handleSignal = async (data) => {
       const { senderSocketId, signalData } = data;
@@ -211,9 +223,10 @@ export default function VoiceCall() {
         pcsRef.current[senderSocketId] = pc;
 
         // если у нас есть активный стрим экрана, отправляем его треки зрителям~~
-        if (screenStream) {
-          screenStream.getTracks().forEach(track => {
-            pc.addTrack(track, screenStream);
+        const currentStream = screenStreamRef.current;
+        if (currentStream) {
+          currentStream.getTracks().forEach(track => {
+            pc.addTrack(track, currentStream);
           });
         }
 
@@ -268,7 +281,7 @@ export default function VoiceCall() {
     return () => {
       socket.off('webrtc_signal', handleSignal);
     };
-  }, [socket, activeCall, screenStream]);
+  }, [socket]);
 
   // 3. Закрываем все соединения при выходе из звонка~~
   useEffect(() => {
@@ -283,7 +296,7 @@ export default function VoiceCall() {
 
   // Следим за состоянием трансляции экрана и запрашиваем захват~~
   const handleScreenShareClick = async () => {
-    if (!activeCall.isScreenSharing) {
+    if (!screenStream) {
       try {
         const stream = await navigator.mediaDevices.getDisplayMedia({ 
           video: {
@@ -312,17 +325,39 @@ export default function VoiceCall() {
       setScreenStream(null);
     }
     const state = useStore.getState().activeCall;
-    if (state && state.isScreenSharing) {
+    const localPart = state?.participants?.find(p => p.isLocal);
+    if (localPart && localPart.isScreenSharing) {
       toggleScreenShare();
     }
   };
 
-  // Навешиваем поток на видео-плеер~~
+  // Навешиваем локальный поток на видео-плеер~~
   useEffect(() => {
-    if (videoRef.current && screenStream) {
-      videoRef.current.srcObject = screenStream;
+    if (localVideoRef.current) {
+      if (screenStream) {
+        if (localVideoRef.current.srcObject !== screenStream) {
+          localVideoRef.current.srcObject = screenStream;
+          localVideoRef.current.play().catch(err => console.log("ошибка автоплея локального стрима:", err));
+        }
+      } else {
+        localVideoRef.current.srcObject = null;
+      }
     }
   }, [screenStream]);
+
+  // Навешиваем удаленный поток на видео-плеер~~
+  useEffect(() => {
+    if (remoteVideoRef.current) {
+      if (remoteStream) {
+        if (remoteVideoRef.current.srcObject !== remoteStream) {
+          remoteVideoRef.current.srcObject = remoteStream;
+          remoteVideoRef.current.play().catch(err => console.log("ошибка автоплея удаленного стрима:", err));
+        }
+      } else {
+        remoteVideoRef.current.srcObject = null;
+      }
+    }
+  }, [remoteStream]);
 
   // Чистим поток при размонтировании звонка~~
   useEffect(() => {
@@ -390,14 +425,7 @@ export default function VoiceCall() {
           }}>
             {isLocalSharing ? (
               <video 
-                ref={(el) => {
-                  if (el && screenStream) {
-                    if (el.srcObject !== screenStream) {
-                      el.srcObject = screenStream;
-                      el.play().catch(err => console.log("ошибка автоплея локального стрима:", err));
-                    }
-                  }
-                }}
+                ref={localVideoRef}
                 autoPlay 
                 playsInline 
                 muted 
@@ -405,14 +433,7 @@ export default function VoiceCall() {
               />
             ) : remoteStream ? (
               <video 
-                ref={(el) => {
-                  if (el && remoteStream) {
-                    if (el.srcObject !== remoteStream) {
-                      el.srcObject = remoteStream;
-                      el.play().catch(err => console.log("ошибка автоплея удаленного стрима:", err));
-                    }
-                  }
-                }}
+                ref={remoteVideoRef}
                 autoPlay 
                 playsInline 
                 style={{ width: '100%', height: '100%', objectFit: 'contain' }}
@@ -654,12 +675,12 @@ export default function VoiceCall() {
           </button>
 
           <button 
-            className={`call-btn ${activeCall.isScreenSharing ? 'active' : ''}`}
+            className={`call-btn ${screenStream ? 'active' : ''}`}
             onClick={handleScreenShareClick}
-            title={activeCall.isScreenSharing ? "Прекратить стрим" : "Начать трансляцию экрана"}
-            style={{ width: 38, height: 38, borderRadius: '50%', border: 'none', backgroundColor: activeCall.isScreenSharing ? 'var(--discord-green)' : 'var(--background-sidebar)', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justify: 'center' }}
+            title={screenStream ? "Прекратить стрим" : "Начать трансляцию экрана"}
+            style={{ width: 38, height: 38, borderRadius: '50%', border: 'none', backgroundColor: screenStream ? 'var(--discord-green)' : 'var(--background-sidebar)', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justify: 'center' }}
           >
-            {activeCall.isScreenSharing ? <Monitor size={18} style={{ margin: 'auto' }} /> : <MonitorOff size={18} style={{ margin: 'auto' }} />}
+            {screenStream ? <Monitor size={18} style={{ margin: 'auto' }} /> : <MonitorOff size={18} style={{ margin: 'auto' }} />}
           </button>
 
           <button 
