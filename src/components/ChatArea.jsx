@@ -173,6 +173,13 @@ export default function ChatArea() {
       {/* форма ввода сообщения~~ */}
       <form onSubmit={handleSend} className="chat-input-form">
         <div className="chat-input-wrapper">
+          <input 
+            type="text" 
+            className="chat-input" 
+            placeholder={isDm ? `Написать @${channelName}` : `Написать в #${channelName}`}
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value)}
+          />
           <input
             type="file"
             id="chat-image-upload"
@@ -188,13 +195,6 @@ export default function ChatArea() {
           >
             <Paperclip size={18} />
           </label>
-          <input 
-            type="text" 
-            className="chat-input" 
-            placeholder={isDm ? `Написать @${channelName}` : `Написать в #${channelName}`}
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-          />
           <button type="submit" className="control-btn" style={{ color: 'var(--discord-blurple)' }}>
             <Send size={18} />
           </button>
