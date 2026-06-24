@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# SQLite database
+*.sqlite
+database.sqlite
+database.sqlite-journal
