@@ -94,22 +94,71 @@ function MainLayout() {
   useEffect(() => {
     if (!isAuthenticated) return;
 
-    const interval = setInterval(() => {
-      fetchServers();
-      fetchFriends();
-      
-      const activeCh = useStore.getState().activeChannelId;
-      if (activeCh && activeCh !== 'friends') {
-        if (activeCh.startsWith('dm_')) {
-          const dmUser = useStore.getState().activeDmUser;
-          if (dmUser) {
-            const user = useStore.getState().userProfile;
-            const dmKey = 'dm_' + [user.username, dmUser.username].sort().join('_');
-            useStore.getState().fetchMessages(dmKey);
+    // запрашиваем разрешение на уведомления в браузере при входе~~
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+
+    // локальные переменные для отслеживания изменений~~
+    let prevFriends = [];
+    let prevMessageCounts = {};
+
+    const interval = setInterval(async () => {
+      try {
+        await fetchServers();
+        await fetchFriends();
+        
+        const currentFriends = useStore.getState().friends;
+        const currentUser = useStore.getState().userProfile;
+
+        // 1. проверка новых заявок в друзья~~
+        currentFriends.forEach(f => {
+          if (f.relation === 'pending_incoming') {
+            const wasPending = prevFriends.some(pf => pf.username === f.username && pf.relation === 'pending_incoming');
+            if (!wasPending && prevFriends.length > 0) {
+              if ('Notification' in window && Notification.permission === 'granted') {
+                new Notification('Новый запрос дружбы! 🌸', {
+                  body: `${f.username} хочет добавить тебя в друзья~~ ня!`,
+                  tag: 'friend_request_' + f.username
+                });
+              }
+            }
           }
-        } else {
-          useStore.getState().fetchMessages(activeCh);
+        });
+        prevFriends = currentFriends;
+
+        // 2. проверка новых сообщений в активном чате~~
+        const activeCh = useStore.getState().activeChannelId;
+        if (activeCh && activeCh !== 'friends') {
+          let chatKey = activeCh;
+          if (activeCh.startsWith('dm_')) {
+            const dmUser = useStore.getState().activeDmUser;
+            if (dmUser) {
+              chatKey = 'dm_' + [currentUser.username, dmUser.username].sort().join('_');
+            }
+          }
+
+          await useStore.getState().fetchMessages(chatKey);
+
+          const currentMsgs = useStore.getState().messages[chatKey] || [];
+          const lastMsg = currentMsgs[currentMsgs.length - 1];
+
+          if (lastMsg && lastMsg.sender !== currentUser.username) {
+            const prevCount = prevMessageCounts[chatKey] || 0;
+            // показываем уведомление только если количество сообщений увеличилось и вкладка не в фокусе (или всегда)~~
+            if (currentMsgs.length > prevCount && prevCount > 0) {
+              if ('Notification' in window && Notification.permission === 'granted' && document.hidden) {
+                new Notification(`Новое сообщение от ${lastMsg.sender}! 💬`, {
+                  body: lastMsg.content,
+                  tag: 'msg_' + chatKey
+                });
+              }
+            }
+          }
+          prevMessageCounts[chatKey] = currentMsgs.length;
         }
+      } catch (e) {
+        console.error('ошибка при обновлении уведомлений:', e);
       }
     }, 2500);
 
