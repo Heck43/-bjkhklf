@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from '../store/useStore';
-import { Hash, Search, Send, User } from 'lucide-react';
+import { Hash, Search, Send, User, Paperclip } from 'lucide-react';
 
 // мрррр~~ это наша область чатика!
 // мы скроллим вниз при новых сообщениях и поддерживаем поиск, ня!
 // а еще тут можно писать милые штучки хозяину... owo 🐾
 
 export default function ChatArea() {
-  const { activeServerId, activeChannelId, activeDmUser, servers, messages, sendMessage, userProfile } = useStore();
+  const { activeServerId, activeChannelId, activeDmUser, servers, messages, sendMessage, userProfile, viewUserProfile } = useStore();
   const [inputText, setInputText] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const messagesEndRef = useRef(null);
@@ -56,6 +56,47 @@ export default function ChatArea() {
     if (!inputText.trim()) return;
     sendMessage(chatKey, inputText.trim(), isDm);
     setInputText('');
+  };
+
+  // мяууу~~ загрузка картинки в чатик!
+  const handleChatImageChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 3 * 1024 * 1024) {
+        alert("Оййй, картинка слишком большая! Максимум 3MB, ня~~");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        sendMessage(chatKey, reader.result, isDm);
+      };
+      reader.readAsDataURL(file);
+      e.target.value = '';
+    }
+  };
+
+  // няняня~~ если контент сообщения — картинка base64, рисуем ее красиво!
+  const renderMessageContent = (content) => {
+    if (content.startsWith('data:image/')) {
+      return (
+        <img 
+          src={content} 
+          alt="chat-attachment" 
+          className="message-image"
+          style={{
+            maxWidth: '100%',
+            maxHeight: '300px',
+            borderRadius: '8px',
+            marginTop: '8px',
+            border: '1px solid var(--glass-border)',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+            display: 'block',
+            cursor: 'zoom-in'
+          }}
+        />
+      );
+    }
+    return <div className="message-content">{content}</div>;
   };
 
   return (
@@ -107,16 +148,21 @@ export default function ChatArea() {
             <div key={msg.id} className="message-item">
               <div 
                 className="message-avatar" 
-                style={{ backgroundColor: msg.avatarColor || '#ff8da1' }}
+                style={{ backgroundColor: msg.avatarColor || '#ff8da1', cursor: 'pointer' }}
+                onClick={() => viewUserProfile(msg.sender)}
               >
-                {msg.sender.substring(0, 2)}
+                {msg.avatarUrl ? (
+                  <img src={msg.avatarUrl} alt={msg.sender} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                ) : (
+                  msg.sender.substring(0, 2)
+                )}
               </div>
               <div className="message-content-wrapper">
                 <div className="message-sender-meta">
-                  <span className="message-sender">{msg.sender}</span>
+                  <span className="message-sender" style={{ cursor: 'pointer' }} onClick={() => viewUserProfile(msg.sender)}>{msg.sender}</span>
                   <span className="message-time">{msg.timestamp}</span>
                 </div>
-                <div className="message-content">{msg.content}</div>
+                {renderMessageContent(msg.content)}
               </div>
             </div>
           ))}
@@ -127,6 +173,21 @@ export default function ChatArea() {
       {/* форма ввода сообщения~~ */}
       <form onSubmit={handleSend} className="chat-input-form">
         <div className="chat-input-wrapper">
+          <input
+            type="file"
+            id="chat-image-upload"
+            accept="image/*"
+            onChange={handleChatImageChange}
+            style={{ display: 'none' }}
+          />
+          <label
+            htmlFor="chat-image-upload"
+            className="control-btn"
+            style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}
+            title="Загрузить изображение"
+          >
+            <Paperclip size={18} />
+          </label>
           <input 
             type="text" 
             className="chat-input" 

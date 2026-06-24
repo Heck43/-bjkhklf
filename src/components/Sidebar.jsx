@@ -103,9 +103,13 @@ export default function Sidebar() {
                 onClick={() => handleDmUserClick(friend)}
               >
                 <div className="avatar-container" style={{ width: 20, height: 20 }}>
-                  <div className="avatar" style={{ backgroundColor: friend.status === 'online' ? '#3BA55D' : '#72767d', fontSize: 9 }}>
-                    {friend.username.substring(0, 2)}
-                  </div>
+                  {friend.avatarUrl ? (
+                    <img src={friend.avatarUrl} alt={friend.username} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                  ) : (
+                    <div className="avatar" style={{ backgroundColor: friend.avatarColor || '#72767d', fontSize: 9 }}>
+                      {friend.username.substring(0, 2)}
+                    </div>
+                  )}
                   <div className={`status-dot ${friend.status}`} style={{ width: 6, height: 6, border: '1px solid var(--background-sidebar)' }} />
                 </div>
                 <span className="channel-name" style={{ marginLeft: 4 }}>{friend.username}</span>
@@ -170,9 +174,13 @@ export default function Sidebar() {
       <div className="user-panel">
         <div className="user-info" onClick={() => setSettingsOpen(true)} title="Настройки профиля">
           <div className="avatar-container">
-            <div className="avatar" style={{ backgroundColor: userProfile.avatarColor }}>
-              {userProfile.username.substring(0, 2)}
-            </div>
+            {userProfile.avatarUrl ? (
+              <img src={userProfile.avatarUrl} alt="avatar" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+            ) : (
+              <div className="avatar" style={{ backgroundColor: userProfile.avatarColor }}>
+                {userProfile.username.substring(0, 2)}
+              </div>
+            )}
             <div className="status-dot online" />
           </div>
           <div className="user-meta">

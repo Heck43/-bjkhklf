@@ -8,6 +8,7 @@ import FriendsList from './components/FriendsList';
 import ChatArea from './components/ChatArea';
 import VoiceCall from './components/VoiceCall';
 import UserSettings from './components/UserSettings';
+import UserProfileModal from './components/UserProfileModal';
 import Auth from './pages/Auth';
 
 // мяууу~~ вот наш главный компонент приложения!
@@ -15,7 +16,7 @@ import Auth from './pages/Auth';
 
 // маленький внутренний компонент для списка участников сервера справа~~
 function MemberBar() {
-  const { friends, userProfile } = useStore();
+  const { friends, userProfile, viewUserProfile } = useStore();
   const onlineMembers = friends.filter(f => f.relation === 'friend' && f.status !== 'offline');
   const offlineMembers = friends.filter(f => f.relation === 'friend' && f.status === 'offline');
 
@@ -25,11 +26,15 @@ function MemberBar() {
       <div className="member-group">
         <span className="member-group-title">В сети — {onlineMembers.length + 1}</span>
         {/* мы сами всегда в сети, ня! */}
-        <div className="member-item">
+        <div className="member-item" style={{ cursor: 'pointer' }} onClick={() => viewUserProfile(userProfile.username)}>
           <div className="avatar-container" style={{ width: 32, height: 32 }}>
-            <div className="avatar" style={{ backgroundColor: userProfile.avatarColor }}>
-              {userProfile.username.substring(0, 2)}
-            </div>
+            {userProfile.avatarUrl ? (
+              <img src={userProfile.avatarUrl} alt="avatar" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+            ) : (
+              <div className="avatar" style={{ backgroundColor: userProfile.avatarColor }}>
+                {userProfile.username.substring(0, 2)}
+              </div>
+            )}
             <div className="status-dot online" />
           </div>
           <div className="user-meta">
@@ -40,11 +45,15 @@ function MemberBar() {
 
         {/* остальные друзья в сети~~ */}
         {onlineMembers.map(m => (
-          <div key={m.id} className="member-item">
+          <div key={m.id} className="member-item" style={{ cursor: 'pointer' }} onClick={() => viewUserProfile(m.username)}>
             <div className="avatar-container" style={{ width: 32, height: 32 }}>
-              <div className="avatar" style={{ backgroundColor: m.status === 'online' ? '#3BA55D' : '#72767d' }}>
-                {m.username.substring(0, 2)}
-              </div>
+              {m.avatarUrl ? (
+                <img src={m.avatarUrl} alt={m.username} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+              ) : (
+                <div className="avatar" style={{ backgroundColor: m.avatarColor || '#72767d' }}>
+                  {m.username.substring(0, 2)}
+                </div>
+              )}
               <div className={`status-dot ${m.status}`} />
             </div>
             <div className="user-meta">
@@ -59,11 +68,15 @@ function MemberBar() {
       <div className="member-group" style={{ marginTop: 12 }}>
         <span className="member-group-title">Не в сети — {offlineMembers.length}</span>
         {offlineMembers.map(m => (
-          <div key={m.id} className="member-item offline">
+          <div key={m.id} className="member-item offline" style={{ cursor: 'pointer' }} onClick={() => viewUserProfile(m.username)}>
             <div className="avatar-container" style={{ width: 32, height: 32 }}>
-              <div className="avatar" style={{ backgroundColor: '#72767d' }}>
-                {m.username.substring(0, 2)}
-              </div>
+              {m.avatarUrl ? (
+                <img src={m.avatarUrl} alt={m.username} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+              ) : (
+                <div className="avatar" style={{ backgroundColor: '#72767d' }}>
+                  {m.username.substring(0, 2)}
+                </div>
+              )}
               <div className="status-dot offline" />
             </div>
             <div className="user-meta">
@@ -162,6 +175,9 @@ function MainLayout() {
 
       {/* Модальное окно настроек */}
       <UserSettings />
+
+      {/* Карточка просмотра чужого профиля */}
+      <UserProfileModal />
     </div>
   );
 }

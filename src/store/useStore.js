@@ -36,8 +36,11 @@ export const useStore = create((set, get) => ({
     customStatus: '',
     avatarColor: '#ff8da1',
     accentColor: '#ff2d55',
-    id: null
+    id: null,
+    avatarUrl: ''
   },
+
+  selectedProfileUser: null,
 
   servers: [],
   friends: [],
@@ -108,7 +111,7 @@ export const useStore = create((set, get) => ({
     set({
       token: null,
       isAuthenticated: false,
-      userProfile: { username: '', customStatus: '', avatarColor: '#ff8da1', accentColor: '#ff2d55', id: null },
+      userProfile: { username: '', customStatus: '', avatarColor: '#ff8da1', accentColor: '#ff2d55', id: null, avatarUrl: '' },
       friends: [],
       messages: {},
       activeCall: null
@@ -177,6 +180,29 @@ export const useStore = create((set, get) => ({
             tag: 'friend_request_' + data.from
           });
         }
+      }
+    });
+
+    socket.on('voice_state_update', (data) => {
+      const { channelId, participants } = data;
+      const currentUser = get().userProfile;
+      const activeCall = get().activeCall;
+
+      if (activeCall && activeCall.channelId === channelId) {
+        // маппим участников с флагом isLocal для текущего пользователя~~
+        const mapped = participants.map(p => ({
+          username: p.username,
+          avatarColor: p.avatarColor,
+          isLocal: p.username === currentUser.username
+        }));
+        
+        set({
+          activeCall: {
+            ...activeCall,
+            participants: mapped,
+            audioLevels: mapped.map(p => ({ name: p.username, level: 10 }))
+          }
+        });
       }
     });
 
@@ -251,7 +277,9 @@ export const useStore = create((set, get) => ({
         username: rf.friend_username,
         status: rf.status,
         customStatus: rf.customStatus,
-        relation: rf.relation
+        relation: rf.relation,
+        avatarColor: rf.avatarColor || '#72767d',
+        avatarUrl: rf.avatarUrl || ''
       }));
       set({ friends: formatted });
     } catch (e) {
@@ -271,6 +299,7 @@ export const useStore = create((set, get) => ({
             content: r.content,
             timestamp: r.timestamp,
             avatarColor: r.avatarColor,
+            avatarUrl: r.avatarUrl || '',
             isOwn: r.sender === state.userProfile.username
           }))
         }
@@ -322,6 +351,24 @@ export const useStore = create((set, get) => ({
       }
     } catch (e) {
       console.error('ошибка обновления профиля:', e);
+    }
+  },
+
+  setSelectedProfileUser: (user) => set({ selectedProfileUser: user }),
+
+  viewUserProfile: async (username) => {
+    try {
+      const profile = await apiFetch(`/api/users/${username}`);
+      const friendData = get().friends.find(f => f.username.toLowerCase() === username.toLowerCase());
+      set({ 
+        selectedProfileUser: {
+          ...profile,
+          relation: friendData ? friendData.relation : null,
+          status: friendData ? friendData.status : 'offline'
+        } 
+      });
+    } catch (e) {
+      console.error('ошибка получения профиля:', e);
     }
   },
 
@@ -441,30 +488,37 @@ export const useStore = create((set, get) => ({
     }
   },
 
-  // --- ГОЛОСОВЫЕ ЗВОНКИ ---
+  // --- ГОЛОСОВЫЕ ЗВОНКИ ЧЕРЕЗ СОКЕТЫ ---
 
   startCall: (channelId, name) => {
-    const friendsInCall = get().friends.filter(f => f.status === 'online').slice(0, 3);
-    
+    const socket = get().socket;
+    if (socket) {
+      socket.emit('join_voice', channelId);
+    }
+
+    const user = get().userProfile;
     const callData = {
       channelId,
       channelName: name,
       participants: [
-        { username: get().userProfile.username, avatarColor: get().userProfile.avatarColor, isLocal: true },
-        ...friendsInCall.map(f => ({ username: f.username, avatarColor: '#3BA55D' }))
+        { username: user.username, avatarColor: user.avatarColor || '#ff8da1', avatarUrl: user.avatarUrl || '', isLocal: true }
       ],
       isMuted: false,
       isDeafened: false,
       isCameraOn: false,
       isScreenSharing: false,
       networkLatency: Array.from({ length: 10 }, (_, i) => ({ time: i, ms: Math.floor(Math.random() * 30) + 15 })),
-      audioLevels: friendsInCall.map(f => ({ name: f.username, level: 10 }))
+      audioLevels: [{ name: user.username, level: 10 }]
     };
 
     set({ activeCall: callData, activeChannelId: channelId });
   },
 
   endCall: () => {
+    const socket = get().socket;
+    if (socket) {
+      socket.emit('leave_voice');
+    }
     set({ activeCall: null });
   },
 

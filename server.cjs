@@ -84,6 +84,9 @@ const db = {
           )
         `);
         await client.query(`
+          ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT DEFAULT ''
+        `);
+        await client.query(`
           CREATE TABLE IF NOT EXISTS servers (
             id VARCHAR(50) PRIMARY KEY,
             name VARCHAR(50) NOT NULL,
@@ -210,10 +213,12 @@ const db = {
       const res = await pgPool.query('SELECT * FROM users WHERE LOWER(username) = LOWER($1)', [username]);
       if (res.rows.length === 0) return null;
       const u = res.rows[0];
-      return { id: u.id, username: u.username, password: u.password, avatarColor: u.avatar_color, accentColor: u.accent_color, customStatus: u.custom_status };
+      return { id: u.id, username: u.username, password: u.password, avatarColor: u.avatar_color, accentColor: u.accent_color, customStatus: u.custom_status, avatarUrl: u.avatar_url || '' };
     } else {
       const dbData = readDb();
-      return dbData.users.find(u => u.username.toLowerCase() === username.toLowerCase()) || null;
+      const u = dbData.users.find(u => u.username.toLowerCase() === username.toLowerCase());
+      if (!u) return null;
+      return { ...u, avatarUrl: u.avatarUrl || '' };
     }
   },
 
@@ -222,10 +227,12 @@ const db = {
       const res = await pgPool.query('SELECT * FROM users WHERE id = $1', [id]);
       if (res.rows.length === 0) return null;
       const u = res.rows[0];
-      return { id: u.id, username: u.username, password: u.password, avatarColor: u.avatar_color, accentColor: u.accent_color, customStatus: u.custom_status };
+      return { id: u.id, username: u.username, password: u.password, avatarColor: u.avatar_color, accentColor: u.accent_color, customStatus: u.custom_status, avatarUrl: u.avatar_url || '' };
     } else {
       const dbData = readDb();
-      return dbData.users.find(u => u.id === id) || null;
+      const u = dbData.users.find(u => u.id === id);
+      if (!u) return null;
+      return { ...u, avatarUrl: u.avatarUrl || '' };
     }
   },
 
@@ -237,10 +244,10 @@ const db = {
         [username, password, avatarColor, accentColor]
       );
       const u = res.rows[0];
-      return { id: u.id, username: u.username, password: u.password, avatarColor: u.avatar_color, accentColor: u.accent_color, customStatus: u.custom_status };
+      return { id: u.id, username: u.username, password: u.password, avatarColor: u.avatar_color, accentColor: u.accent_color, customStatus: u.custom_status, avatarUrl: '' };
     } else {
       const dbData = readDb();
-      const newUser = { id: dbData.users.length + 1, username, password, avatarColor, accentColor, customStatus: '' };
+      const newUser = { id: dbData.users.length + 1, username, password, avatarColor, accentColor, customStatus: '', avatarUrl: '' };
       dbData.users.push(newUser);
       writeDb(dbData);
       return newUser;
@@ -248,27 +255,27 @@ const db = {
   },
 
   // Обновить профиль~~
-  updateUserProfile: async (id, username, customStatus, avatarColor, accentColor) => {
+  updateUserProfile: async (id, username, customStatus, avatarColor, accentColor, avatarUrl = '') => {
     if (isPostgres) {
       await pgPool.query(
-        'UPDATE users SET username = $1, custom_status = $2, avatar_color = $3, accent_color = $4 WHERE id = $5',
-        [username, customStatus, avatarColor, accentColor, id]
+        'UPDATE users SET username = $1, custom_status = $2, avatar_color = $3, accent_color = $4, avatar_url = $5 WHERE id = $6',
+        [username, customStatus, avatarColor, accentColor, avatarUrl, id]
       );
-      return { id, username, customStatus, avatarColor, accentColor };
+      return { id, username, customStatus, avatarColor, accentColor, avatarUrl };
     } else {
       const dbData = readDb();
       const userIndex = dbData.users.findIndex(u => u.id === id);
       if (userIndex === -1) return null;
 
       const oldUsername = dbData.users[userIndex].username;
-      dbData.users[userIndex] = { ...dbData.users[userIndex], username, customStatus, avatarColor, accentColor };
+      dbData.users[userIndex] = { ...dbData.users[userIndex], username, customStatus, avatarColor, accentColor, avatarUrl };
 
       if (oldUsername !== username) {
         dbData.friends = dbData.friends.map(f => f.friend_username === oldUsername ? { ...f, friend_username: username } : f);
         dbData.messages = dbData.messages.map(m => m.sender === oldUsername ? { ...m, sender: username } : m);
       }
       writeDb(dbData);
-      return { id, username, customStatus, avatarColor, accentColor };
+      return { id, username, customStatus, avatarColor, accentColor, avatarUrl };
     }
   },
 
@@ -286,23 +293,34 @@ const db = {
   // Получить сообщения~~
   getMessages: async (channelId) => {
     if (isPostgres) {
-      const res = await pgPool.query('SELECT * FROM messages WHERE channel_id = $1 ORDER BY id ASC', [channelId]);
+      const res = await pgPool.query(`
+        SELECT m.id, m.sender, m.content, m.timestamp, u.avatar_color, u.avatar_url
+        FROM messages m
+        LEFT JOIN users u ON LOWER(u.username) = LOWER(m.sender)
+        WHERE m.channel_id = $1
+        ORDER BY m.id ASC
+      `, [channelId]);
       return res.rows.map(r => ({
         id: r.id,
         sender: r.sender,
         content: r.content,
         timestamp: r.timestamp,
-        avatarColor: r.avatar_color
+        avatarColor: r.avatar_color || '#ff8da1',
+        avatarUrl: r.avatar_url || ''
       }));
     } else {
       const dbData = readDb();
-      return dbData.messages.filter(m => m.channel_id === channelId).map(r => ({
-        id: r.id,
-        sender: r.sender,
-        content: r.content,
-        timestamp: r.timestamp,
-        avatarColor: r.avatarColor
-      }));
+      return dbData.messages.filter(m => m.channel_id === channelId).map(r => {
+        const u = dbData.users.find(usr => usr.username.toLowerCase() === r.sender.toLowerCase());
+        return {
+          id: r.id,
+          sender: r.sender,
+          content: r.content,
+          timestamp: r.timestamp,
+          avatarColor: u ? u.avatarColor : (r.avatarColor || '#ff8da1'),
+          avatarUrl: u ? (u.avatarUrl || '') : ''
+        };
+      });
     }
   },
 
@@ -327,11 +345,33 @@ const db = {
   // Получить друзей~~
   getFriends: async (userId) => {
     if (isPostgres) {
-      const res = await pgPool.query('SELECT * FROM friends WHERE user_id = $1', [userId]);
-      return res.rows.map(r => ({ friend_username: r.friend_username, status: r.status, customStatus: r.custom_status, relation: r.relation }));
+      const res = await pgPool.query(`
+        SELECT f.friend_username, f.status, f.custom_status, f.relation, u.avatar_color, u.avatar_url
+        FROM friends f
+        LEFT JOIN users u ON LOWER(u.username) = LOWER(f.friend_username)
+        WHERE f.user_id = $1
+      `, [userId]);
+      return res.rows.map(r => ({ 
+        friend_username: r.friend_username, 
+        status: r.status, 
+        customStatus: r.custom_status, 
+        relation: r.relation,
+        avatarColor: r.avatar_color,
+        avatarUrl: r.avatar_url || ''
+      }));
     } else {
       const dbData = readDb();
-      return dbData.friends.filter(f => f.user_id === userId).map(r => ({ friend_username: r.friend_username, status: r.status, customStatus: r.customStatus, relation: r.relation }));
+      return dbData.friends.filter(f => f.user_id === userId).map(r => {
+        const u = dbData.users.find(usr => usr.username.toLowerCase() === r.friend_username.toLowerCase());
+        return { 
+          friend_username: r.friend_username, 
+          status: r.status, 
+          customStatus: r.customStatus, 
+          relation: r.relation,
+          avatarColor: u ? u.avatarColor : '#72767d',
+          avatarUrl: u ? (u.avatarUrl || '') : ''
+        };
+      });
     }
   },
 
@@ -433,6 +473,27 @@ io.use((socket, next) => {
   });
 });
 
+// Хранилище участников голосовых каналов~~
+const voiceStates = {}; // { channelId: [ { username, socketId, avatarColor } ] }
+
+const leaveVoice = (socket) => {
+  for (const channelId in voiceStates) {
+    const list = voiceStates[channelId];
+    const index = list.findIndex(p => p.socketId === socket.id);
+    if (index !== -1) {
+      list.splice(index, 1);
+      // оповещаем комнату о выходе участника~~
+      io.to(channelId).emit('voice_state_update', {
+        channelId,
+        participants: list
+      });
+      if (list.length === 0) {
+        delete voiceStates[channelId];
+      }
+    }
+  }
+};
+
 io.on('connection', (socket) => {
   const username = socket.user.username;
   console.log(`сокет подключился: @${username} (id: ${socket.id})~~ 🌸`);
@@ -444,7 +505,8 @@ io.on('connection', (socket) => {
   socket.on('join_channel', (channelId) => {
     // выходим из предыдущих комнат каналов (но остаемся в своей личной user_ комнате)~~
     for (const room of socket.rooms) {
-      if (room !== socket.id && room !== `user_${username.toLowerCase()}`) {
+      if (room !== socket.id && room !== `user_${username.toLowerCase()}` && !room.startsWith('c_')) {
+        // не выходим из голосовых комнат, так как там сидим параллельно~~
         socket.leave(room);
       }
     }
@@ -452,7 +514,53 @@ io.on('connection', (socket) => {
     console.log(`@${username} зашел в комнату сокетов: ${channelId}~~ 🔊`);
   });
 
+  // Вход в голосовой канал~~
+  socket.on('join_voice', async (channelId) => {
+    leaveVoice(socket);
+
+    const username = socket.user.username;
+    let avatarColor = '#ff8da1';
+    let avatarUrl = '';
+
+    try {
+      const u = await db.getUserByUsername(username);
+      if (u) {
+        avatarColor = u.avatarColor;
+        avatarUrl = u.avatarUrl || '';
+      }
+    } catch (e) {
+      console.error('ошибка при получении юзера для голосового канала:', e);
+    }
+
+    if (!voiceStates[channelId]) {
+      voiceStates[channelId] = [];
+    }
+
+    if (!voiceStates[channelId].some(p => p.username === username)) {
+      voiceStates[channelId].push({
+        username,
+        socketId: socket.id,
+        avatarColor,
+        avatarUrl
+      });
+    }
+
+    socket.join(channelId);
+    console.log(`@${username} подключился к голосу в канале: ${channelId}~~ 🔊`);
+
+    io.to(channelId).emit('voice_state_update', {
+      channelId,
+      participants: voiceStates[channelId]
+    });
+  });
+
+  // Выход из голосового канала~~
+  socket.on('leave_voice', () => {
+    leaveVoice(socket);
+  });
+
   socket.on('disconnect', () => {
+    leaveVoice(socket);
     console.log(`сокет отключился: @${username} (id: ${socket.id})~~ 💾`);
   });
 });
@@ -593,7 +701,7 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
 
 // обновление профиля~~
 app.put('/api/auth/profile', authenticateToken, async (req, res) => {
-  const { username, customStatus, avatarColor, accentColor } = req.body;
+  const { username, customStatus, avatarColor, accentColor, avatarUrl } = req.body;
   
   try {
     const taken = await db.isUsernameTaken(req.user.id, username);
@@ -601,8 +709,25 @@ app.put('/api/auth/profile', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'это имя пользователя уже занято!' });
     }
 
-    const updated = await db.updateUserProfile(req.user.id, username, customStatus, avatarColor, accentColor);
+    const updated = await db.updateUserProfile(req.user.id, username, customStatus, avatarColor, accentColor, avatarUrl);
     res.json({ success: true, user: updated });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// получить профиль любого другого пользователя по юзернейму~~
+app.get('/api/users/:username', authenticateToken, async (req, res) => {
+  try {
+    const user = await db.getUserByUsername(req.params.username);
+    if (!user) return res.status(404).json({ error: 'пользователь не найден!' });
+    res.json({
+      username: user.username,
+      avatarColor: user.avatarColor,
+      accentColor: user.accentColor,
+      customStatus: user.customStatus,
+      avatarUrl: user.avatarUrl
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -626,19 +751,29 @@ app.post('/api/messages', authenticateToken, async (req, res) => {
   const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   
   try {
-    const newMsg = await db.addMessage(channelId, req.user.username, content, timeStr, avatarColor);
+    const senderUser = await db.getUserByUsername(req.user.username);
+    const resolvedAvatarColor = senderUser ? senderUser.avatarColor : (avatarColor || '#ff8da1');
+    const resolvedAvatarUrl = senderUser ? (senderUser.avatarUrl || '') : '';
+
+    const newMsg = await db.addMessage(channelId, req.user.username, content, timeStr, resolvedAvatarColor);
+    
+    const enrichedMsg = {
+      ...newMsg,
+      avatarColor: resolvedAvatarColor,
+      avatarUrl: resolvedAvatarUrl
+    };
     
     // мгновенно оповещаем участников по SSE~~
     if (channelId.startsWith('dm_')) {
       const parts = channelId.replace('dm_', '').split('_');
       parts.forEach(username => {
-        sendSseToUser(username, 'message', { channelId, message: newMsg });
+        sendSseToUser(username, 'message', { channelId, message: enrichedMsg });
       });
     } else {
-      sendSseToAll('message', { channelId, message: newMsg });
+      sendSseToAll('message', { channelId, message: enrichedMsg });
     }
     
-    res.json(newMsg);
+    res.json(enrichedMsg);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

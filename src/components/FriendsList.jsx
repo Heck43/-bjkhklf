@@ -7,7 +7,7 @@ import { MessageSquare, UserMinus, UserCheck, Check, X, Search, Users } from 'lu
 // фильтры, сортировка и добавление новых друзей, ууу~~ 🐾
 
 export default function FriendsList() {
-  const { friends, addFriend, acceptFriend, removeFriend, blockFriend } = useStore();
+  const { friends, addFriend, acceptFriend, removeFriend, blockFriend, viewUserProfile } = useStore();
   const [activeTab, setActiveTab] = useState('online'); // 'online', 'all', 'pending', 'blocked', 'add'
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('alphabetical'); // 'alphabetical', 'status'
@@ -131,11 +131,15 @@ export default function FriendsList() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {sortedFriends.map(friend => (
                   <div key={friend.id} className="friend-row">
-                    <div className="friend-info-left">
+                    <div className="friend-info-left" style={{ cursor: 'pointer' }} onClick={() => viewUserProfile(friend.username)}>
                       <div className="avatar-container" style={{ width: 36, height: 36 }}>
-                        <div className="avatar" style={{ backgroundColor: friend.status === 'online' ? '#3BA55D' : '#72767d', fontSize: 14 }}>
-                          {friend.username.substring(0, 2)}
-                        </div>
+                        {friend.avatarUrl ? (
+                          <img src={friend.avatarUrl} alt={friend.username} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                        ) : (
+                          <div className="avatar" style={{ backgroundColor: friend.avatarColor || '#72767d', fontSize: 14 }}>
+                            {friend.username.substring(0, 2)}
+                          </div>
+                        )}
                         <div className={`status-dot ${friend.status}`} style={{ width: 10, height: 10, border: '2px solid var(--background-chat)' }} />
                       </div>
                       <div className="friend-names">

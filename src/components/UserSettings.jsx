@@ -20,7 +20,8 @@ const profileSchema = z.object({
     .optional()
     .or(z.literal('')),
   avatarColor: z.string(),
-  accentColor: z.string()
+  accentColor: z.string(),
+  avatarUrl: z.string().optional().or(z.literal(''))
 });
 
 const AVATAR_COLORS = ['#ff8da1', '#5865F2', '#3BA55D', '#FAA81A', '#ED4245', '#9b59b6'];
@@ -41,12 +42,29 @@ export default function UserSettings() {
       username: userProfile.username,
       customStatus: userProfile.customStatus || '',
       avatarColor: userProfile.avatarColor,
-      accentColor: userProfile.accentColor
+      accentColor: userProfile.accentColor,
+      avatarUrl: userProfile.avatarUrl || ''
     }
   });
 
   const selectedAvatarColor = watch('avatarColor');
   const selectedAccentColor = watch('accentColor');
+  const avatarUrlValue = watch('avatarUrl');
+
+  const handleAvatarFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) {
+        alert("Оййй, файлик слишком большой! Максимум 2MB, ня~~");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setValue('avatarUrl', reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const onSubmit = (data) => {
     // сохраняем новые настройки профиля в стор~~
@@ -99,9 +117,40 @@ export default function UserSettings() {
               )}
             </div>
 
+            {/* загрузка аватара~~ */}
+            <div className="form-group">
+              <label className="form-label">Загрузить аватарку</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>
+                <input
+                  type="file"
+                  id="avatar-upload"
+                  accept="image/*"
+                  onChange={handleAvatarFileChange}
+                  style={{ display: 'none' }}
+                />
+                <label 
+                  htmlFor="avatar-upload"
+                  className="btn-primary"
+                  style={{ cursor: 'pointer', padding: '8px 16px', borderRadius: 4, display: 'inline-block', fontSize: 13 }}
+                >
+                  Выбрать файл
+                </label>
+                {avatarUrlValue && (
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    style={{ color: 'var(--discord-red)', padding: '8px 16px', fontSize: 13 }}
+                    onClick={() => setValue('avatarUrl', '')}
+                  >
+                    Удалить
+                  </button>
+                )}
+              </div>
+            </div>
+
             {/* выбор цвета аватара~~ */}
             <div className="form-group">
-              <label className="form-label">Цвет аватара</label>
+              <label className="form-label">Цвет аватара (если нет картинки)</label>
               <div className="color-presets">
                 {AVATAR_COLORS.map(color => (
                   <div
@@ -144,9 +193,17 @@ export default function UserSettings() {
               <span className="form-label" style={{ fontSize: 10, display: 'block', marginBottom: 8 }}>Предпросмотр профиля</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div className="avatar-container" style={{ width: 44, height: 44 }}>
-                  <div className="avatar" style={{ backgroundColor: selectedAvatarColor, fontSize: 16 }}>
-                    {watch('username')?.substring(0, 2) || '??'}
-                  </div>
+                  {avatarUrlValue ? (
+                    <img 
+                      src={avatarUrlValue} 
+                      alt="preview avatar" 
+                      style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} 
+                    />
+                  ) : (
+                    <div className="avatar" style={{ backgroundColor: selectedAvatarColor, fontSize: 16 }}>
+                      {watch('username')?.substring(0, 2) || '??'}
+                    </div>
+                  )}
                   <div className="status-dot online" style={{ width: 12, height: 12, border: '2.5px solid var(--background-profile)' }} />
                 </div>
                 <div className="user-meta">
