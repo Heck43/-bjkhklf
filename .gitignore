@@ -27,3 +27,6 @@ dist-ssr
 *.sqlite
 database.sqlite
 database.sqlite-journal
+
+# JSON database
+database.json
