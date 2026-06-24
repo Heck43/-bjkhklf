@@ -82,7 +82,7 @@ export default function ServerSettingsModal({ server, onClose }) {
 
           <div style={{ padding: '40px', overflowY: 'auto', flex: 1 }}>
             {activeTab === 'overview' && (
-              <form onSubmit={handleSaveOverview}>
+              <form onSubmit={canEditRoles ? handleSaveOverview : (e) => e.preventDefault()}>
                 <h2 style={{ fontSize: 20, color: '#fff', marginBottom: 24, marginTop: 0 }}>Обзор сервера</h2>
                 
                 <div style={{ display: 'flex', gap: 24 }}>
@@ -97,6 +97,7 @@ export default function ServerSettingsModal({ server, onClose }) {
                         required
                         maxLength={50}
                         style={{ marginTop: 8 }}
+                        disabled={!canEditRoles}
                       />
                     </div>
                   </div>
@@ -109,10 +110,12 @@ export default function ServerSettingsModal({ server, onClose }) {
                         serverIcon || serverName[0] || '?'
                       )}
                     </div>
-                    <label style={{ fontSize: 12, color: 'var(--discord-blurple)', cursor: 'pointer', fontWeight: 'bold' }}>
-                      Сменить аватарку
-                      <input type="file" accept="image/*" onChange={handleAvatarChange} style={{ display: 'none' }} />
-                    </label>
+                    {canEditRoles && (
+                      <label style={{ fontSize: 12, color: 'var(--discord-blurple)', cursor: 'pointer', fontWeight: 'bold' }}>
+                        Сменить аватарку
+                        <input type="file" accept="image/*" onChange={handleAvatarChange} style={{ display: 'none' }} />
+                      </label>
+                    )}
                   </div>
                 </div>
 
@@ -123,6 +126,7 @@ export default function ServerSettingsModal({ server, onClose }) {
                       <button
                         key={emoji}
                         type="button"
+                        disabled={!canEditRoles}
                         onClick={() => setServerIcon(emoji)}
                         style={{
                           fontSize: 22,
@@ -130,9 +134,10 @@ export default function ServerSettingsModal({ server, onClose }) {
                           border: serverIcon === emoji ? '2px solid var(--discord-blurple)' : '2px solid transparent',
                           borderRadius: 10,
                           backgroundColor: 'var(--background-darkest)',
-                          cursor: 'pointer',
+                          cursor: canEditRoles ? 'pointer' : 'default',
                           transform: serverIcon === emoji ? 'scale(1.1)' : 'scale(1)',
-                          transition: 'all 0.2s ease-in-out'
+                          transition: 'all 0.2s ease-in-out',
+                          opacity: canEditRoles ? 1 : 0.6
                         }}
                       >
                         {emoji}
@@ -141,11 +146,13 @@ export default function ServerSettingsModal({ server, onClose }) {
                   </div>
                 </div>
 
-                <div style={{ marginTop: 40, borderTop: '1px solid var(--background-secondary)', paddingTop: 20, display: 'flex', justifyContent: 'flex-end' }}>
-                  <button type="submit" className="btn-primary" disabled={isSaving} style={{ padding: '8px 24px', borderRadius: 4, fontWeight: 'bold', border: 'none', cursor: 'pointer' }}>
-                    {isSaving ? 'Сохранение...' : 'Сохранить изменения'}
-                  </button>
-                </div>
+                {canEditRoles && (
+                  <div style={{ marginTop: 40, borderTop: '1px solid var(--background-secondary)', paddingTop: 20, display: 'flex', justifyContent: 'flex-end' }}>
+                    <button type="submit" className="btn-primary" disabled={isSaving} style={{ padding: '8px 24px', borderRadius: 4, fontWeight: 'bold', border: 'none', cursor: 'pointer' }}>
+                      {isSaving ? 'Сохранение...' : 'Сохранить изменения'}
+                    </button>
+                  </div>
+                )}
               </form>
             )}
 

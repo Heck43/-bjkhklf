@@ -21,6 +21,46 @@ function MemberBar() {
   const onlineMembers = others.filter(m => m.status !== 'offline');
   const offlineMembers = others.filter(m => m.status === 'offline');
 
+  const myMember = serverMembers.find(m => m.username.toLowerCase() === userProfile.username.toLowerCase());
+  const myRole = myMember?.role;
+
+  // рисуем красивенькую плашечку роли для лапок~~
+  const renderRoleBadge = (role) => {
+    if (!role || role.toLowerCase() === 'member') return null;
+    let bgColor = 'rgba(114, 137, 218, 0.15)';
+    let color = '#7289da';
+    
+    const lower = role.toLowerCase();
+    if (lower === 'owner') {
+      bgColor = 'rgba(250, 168, 26, 0.15)';
+      color = '#FAA81A';
+    } else if (lower === 'admin' || lower === 'админ') {
+      bgColor = 'rgba(237, 66, 69, 0.15)';
+      color = '#ED4245';
+    } else {
+      // для остальных кастомных ролей даем красивый розовый/фиолетовый акцент~~
+      bgColor = 'rgba(255, 141, 161, 0.15)';
+      color = '#ff8da1';
+    }
+    
+    return (
+      <span style={{ 
+        fontSize: 9, 
+        textTransform: 'uppercase', 
+        padding: '2px 6px', 
+        borderRadius: 4, 
+        backgroundColor: bgColor, 
+        color: color, 
+        fontWeight: 'bold',
+        marginLeft: 6,
+        display: 'inline-block',
+        lineHeight: 1
+      }}>
+        {role}
+      </span>
+    );
+  };
+
   return (
     <div className="members-sidebar">
       {/* группа "В сети"~~ */}
@@ -39,7 +79,10 @@ function MemberBar() {
             <div className="status-dot online" />
           </div>
           <div className="user-meta">
-            <span className="username" style={{ color: 'var(--discord-red)' }}>{userProfile.displayName || userProfile.username}</span>
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <span className="username" style={{ color: 'var(--discord-red)' }}>{userProfile.displayName || userProfile.username}</span>
+              {renderRoleBadge(myRole)}
+            </div>
             <span className="custom-status">{userProfile.customStatus}</span>
           </div>
         </div>
@@ -58,7 +101,10 @@ function MemberBar() {
               <div className={`status-dot ${m.status}`} />
             </div>
             <div className="user-meta">
-              <span className="username">{m.displayName || m.username}</span>
+              <div style={{ display: 'flex', alignItems: 'center' }}>
+                <span className="username">{m.displayName || m.username}</span>
+                {renderRoleBadge(m.role)}
+              </div>
               <span className="custom-status">{m.customStatus}</span>
             </div>
           </div>
@@ -81,7 +127,10 @@ function MemberBar() {
               <div className="status-dot offline" />
             </div>
             <div className="user-meta">
-              <span className="username">{m.displayName || m.username}</span>
+              <div style={{ display: 'flex', alignItems: 'center' }}>
+                <span className="username">{m.displayName || m.username}</span>
+                {renderRoleBadge(m.role)}
+              </div>
               <span className="custom-status">{m.customStatus}</span>
             </div>
           </div>
