@@ -30,3 +30,8 @@ database.sqlite-journal
 
 # JSON database
 database.json
+
+# Electron build artifacts
+dist_electron/
+out/
+*.pak
