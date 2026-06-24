@@ -4,10 +4,11 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const path = require('path');
 const fs = require('fs');
+const { Pool } = require('pg');
 
-// привеееет, это наш бэкенд на экспрессе для рейлвея~~
-// мы заменили sqlite3 на надежную pure-JS JSON базу данных!
-// это решило все проблемы с GLIBC на серверах Railway, ууу~~ мяу! 🐾
+// привеееет, это наш гибридный бэкенд на экспрессе для рейлвея~~
+// он автоматически определяет наличие PostgreSQL через DATABASE_URL
+// и подключается к ней, а если мы на локалке — берет файловый JSON! ууу~~ мяу! 🐾
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -17,22 +18,32 @@ const DB_FILE = path.join(__dirname, 'database.json');
 app.use(cors());
 app.use(express.json());
 
-// хелперы для чтения и записи нашей JSON бд~~
+// --- НАСТРОЙКА БАЗЫ ДАННЫХ ---
+const isPostgres = !!process.env.DATABASE_URL;
+let pgPool = null;
+
+if (isPostgres) {
+  pgPool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: {
+      rejectUnauthorized: false // Важно для подключения к бд на Railway!
+    }
+  });
+  console.log('подключаем бд postgresql на railway, ууу~~ 🐘');
+} else {
+  console.log('работаем с локальной json базой данных~~ 💾');
+}
+
+// Чтение/запись JSON базы данных~~
 function readDb() {
   if (!fs.existsSync(DB_FILE)) {
-    const defaultDb = {
-      users: [],
-      messages: [],
-      friends: []
-    };
+    const defaultDb = { users: [], messages: [], friends: [] };
     fs.writeFileSync(DB_FILE, JSON.stringify(defaultDb, null, 2), 'utf8');
     return defaultDb;
   }
   try {
-    const content = fs.readFileSync(DB_FILE, 'utf8');
-    return JSON.parse(content);
+    return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
   } catch (e) {
-    console.error('ошибка парсинга json бд, сбрасываем:', e);
     return { users: [], messages: [], friends: [] };
   }
 }
@@ -41,32 +52,313 @@ function writeDb(data) {
   try {
     fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf8');
   } catch (e) {
-    console.error('ошибка записи в json бд:', e);
+    console.error('ошибка записи json бд:', e);
   }
 }
 
-// инициализируем дефолтные сообщения, если база пустая~~
-function initializeDb() {
-  const dbData = readDb();
-  if (dbData.messages.length === 0) {
-    dbData.messages = [
-      { id: 1, channel_id: 'c1', sender: 'meow_master', content: 'hello everyone! welcome to gamer fox den! ^w^', timestamp: '10:15', avatarColor: '#5865F2' },
-      { id: 2, channel_id: 'c1', sender: 'foxy_boi', content: 'hey there! ready to play some games today? 🐾', timestamp: '10:16', avatarColor: '#3BA55D' },
-      { id: 3, channel_id: 'c1', sender: 'nyan_cat', content: 'nyan nyan nyan~ is there music?', timestamp: '10:20', avatarColor: '#FAA81A' },
-      { id: 4, channel_id: 'c2', sender: 'foxy_boi', content: 'why did the programmer jump out of the window? because they wanted to inspect elements! 😂', timestamp: '09:00', avatarColor: '#3BA55D' },
-      { id: 5, channel_id: 'c2', sender: 'code_fox', content: 'classic, but also very painful... ;w;', timestamp: '09:12', avatarColor: '#ED4245' },
-      { id: 6, channel_id: 'c5', sender: 'code_fox', content: 'hey, did you see react 19 hooks? pretty cool features!', timestamp: 'Yesterday at 18:30', avatarColor: '#ED4245' },
-      { id: 7, channel_id: 'c5', sender: 'meow_master', content: 'yes! the useActionState hook is so clean and simple to use.', timestamp: 'Yesterday at 19:02', avatarColor: '#5865F2' }
+// Универсальный адаптер баз данных (PostgreSQL / JSON)~~
+const db = {
+  init: async () => {
+    if (isPostgres) {
+      const client = await pgPool.connect();
+      try {
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            username VARCHAR(50) UNIQUE NOT NULL,
+            password VARCHAR(255) NOT NULL,
+            avatar_color VARCHAR(10) DEFAULT '#ff8da1',
+            accent_color VARCHAR(10) DEFAULT '#ff2d55',
+            custom_status VARCHAR(100) DEFAULT ''
+          )
+        `);
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS messages (
+            id SERIAL PRIMARY KEY,
+            channel_id VARCHAR(50) NOT NULL,
+            sender VARCHAR(50) NOT NULL,
+            content TEXT NOT NULL,
+            timestamp VARCHAR(20) NOT NULL,
+            avatar_color VARCHAR(10) DEFAULT '#ff8da1'
+          )
+        `);
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS friends (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            friend_username VARCHAR(50) NOT NULL,
+            status VARCHAR(20) DEFAULT 'online',
+            custom_status VARCHAR(100) DEFAULT '',
+            relation VARCHAR(20) NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `);
+
+        // проверяем и заполняем дефолтными сообщениями~~
+        const res = await client.query('SELECT COUNT(*) FROM messages');
+        if (parseInt(res.rows[0].count) === 0) {
+          const q = 'INSERT INTO messages (channel_id, sender, content, timestamp, avatar_color) VALUES ($1, $2, $3, $4, $5)';
+          await client.query(q, ['c1', 'meow_master', 'hello everyone! welcome to gamer fox den! ^w^', '10:15', '#5865F2']);
+          await client.query(q, ['c1', 'foxy_boi', 'hey there! ready to play some games today? 🐾', '10:16', '#3BA55D']);
+          await client.query(q, ['c1', 'nyan_cat', 'nyan nyan nyan~ is there music?', '10:20', '#FAA81A']);
+          await client.query(q, ['c2', 'foxy_boi', 'why did the programmer jump out of the window? because they wanted to inspect elements! 😂', '09:00', '#3BA55D']);
+          await client.query(q, ['c2', 'code_fox', 'classic, but also very painful... ;w;', '09:12', '#ED4245']);
+          await client.query(q, ['c5', 'code_fox', 'hey, did you see react 19 hooks? pretty cool features!', 'Yesterday at 18:30', '#ED4245']);
+          await client.query(q, ['c5', 'meow_master', 'yes! the useActionState hook is so clean and simple to use.', 'Yesterday at 19:02', '#5865F2']);
+          console.log('таблицы бд postgresql успешно заполнены дефолтными сообщениями!');
+        }
+      } finally {
+        client.release();
+      }
+    } else {
+      const dbData = readDb();
+      if (dbData.messages.length === 0) {
+        dbData.messages = [
+          { id: 1, channel_id: 'c1', sender: 'meow_master', content: 'hello everyone! welcome to gamer fox den! ^w^', timestamp: '10:15', avatarColor: '#5865F2' },
+          { id: 2, channel_id: 'c1', sender: 'foxy_boi', content: 'hey there! ready to play some games today? 🐾', timestamp: '10:16', avatarColor: '#3BA55D' },
+          { id: 3, channel_id: 'c1', sender: 'nyan_cat', content: 'nyan nyan nyan~ is there music?', timestamp: '10:20', avatarColor: '#FAA81A' },
+          { id: 4, channel_id: 'c2', sender: 'foxy_boi', content: 'why did the programmer jump out of the window? because they wanted to inspect elements! 😂', timestamp: '09:00', avatarColor: '#3BA55D' },
+          { id: 5, channel_id: 'c2', sender: 'code_fox', content: 'classic, but also very painful... ;w;', timestamp: '09:12', avatarColor: '#ED4245' },
+          { id: 6, channel_id: 'c5', sender: 'code_fox', content: 'hey, did you see react 19 hooks? pretty cool features!', timestamp: 'Yesterday at 18:30', avatarColor: '#ED4245' },
+          { id: 7, channel_id: 'c5', sender: 'meow_master', content: 'yes! the useActionState hook is so clean and simple to use.', timestamp: 'Yesterday at 19:02', avatarColor: '#5865F2' }
+        ];
+        writeDb(dbData);
+        console.log('таблицы json бд успешно заполнены дефолтными сообщениями!');
+      }
+    }
+  },
+
+  // Получить юзера~~
+  getUserByUsername: async (username) => {
+    if (isPostgres) {
+      const res = await pgPool.query('SELECT * FROM users WHERE LOWER(username) = LOWER($1)', [username]);
+      if (res.rows.length === 0) return null;
+      const u = res.rows[0];
+      return { id: u.id, username: u.username, password: u.password, avatarColor: u.avatar_color, accentColor: u.accent_color, customStatus: u.custom_status };
+    } else {
+      const dbData = readDb();
+      return dbData.users.find(u => u.username.toLowerCase() === username.toLowerCase()) || null;
+    }
+  },
+
+  getUserById: async (id) => {
+    if (isPostgres) {
+      const res = await pgPool.query('SELECT * FROM users WHERE id = $1', [id]);
+      if (res.rows.length === 0) return null;
+      const u = res.rows[0];
+      return { id: u.id, username: u.username, password: u.password, avatarColor: u.avatar_color, accentColor: u.accent_color, customStatus: u.custom_status };
+    } else {
+      const dbData = readDb();
+      return dbData.users.find(u => u.id === id) || null;
+    }
+  },
+
+  // Создать юзера~~
+  addUser: async (username, password, avatarColor, accentColor) => {
+    if (isPostgres) {
+      const res = await pgPool.query(
+        'INSERT INTO users (username, password, avatar_color, accent_color) VALUES ($1, $2, $3, $4) RETURNING *',
+        [username, password, avatarColor, accentColor]
+      );
+      const u = res.rows[0];
+      return { id: u.id, username: u.username, password: u.password, avatarColor: u.avatar_color, accentColor: u.accent_color, customStatus: u.custom_status };
+    } else {
+      const dbData = readDb();
+      const newUser = { id: dbData.users.length + 1, username, password, avatarColor, accentColor, customStatus: '' };
+      dbData.users.push(newUser);
+      writeDb(dbData);
+      return newUser;
+    }
+  },
+
+  // Обновить профиль~~
+  updateUserProfile: async (id, username, customStatus, avatarColor, accentColor) => {
+    if (isPostgres) {
+      await pgPool.query(
+        'UPDATE users SET username = $1, custom_status = $2, avatar_color = $3, accent_color = $4 WHERE id = $5',
+        [username, customStatus, avatarColor, accentColor, id]
+      );
+      return { id, username, customStatus, avatarColor, accentColor };
+    } else {
+      const dbData = readDb();
+      const userIndex = dbData.users.findIndex(u => u.id === id);
+      if (userIndex === -1) return null;
+
+      const oldUsername = dbData.users[userIndex].username;
+      dbData.users[userIndex] = { ...dbData.users[userIndex], username, customStatus, avatarColor, accentColor };
+
+      if (oldUsername !== username) {
+        dbData.friends = dbData.friends.map(f => f.friend_username === oldUsername ? { ...f, friend_username: username } : f);
+        dbData.messages = dbData.messages.map(m => m.sender === oldUsername ? { ...m, sender: username } : m);
+      }
+      writeDb(dbData);
+      return { id, username, customStatus, avatarColor, accentColor };
+    }
+  },
+
+  // Проверка занятости имени другими~~
+  isUsernameTaken: async (id, username) => {
+    if (isPostgres) {
+      const res = await pgPool.query('SELECT * FROM users WHERE id != $1 AND LOWER(username) = LOWER($2)', [id, username]);
+      return res.rows.length > 0;
+    } else {
+      const dbData = readDb();
+      return dbData.users.some(u => u.id !== id && u.username.toLowerCase() === username.toLowerCase());
+    }
+  },
+
+  // Получить сообщения~~
+  getMessages: async (channelId) => {
+    if (isPostgres) {
+      const res = await pgPool.query('SELECT * FROM messages WHERE channel_id = $1 ORDER BY id ASC', [channelId]);
+      return res.rows.map(r => ({
+        id: r.id,
+        sender: r.sender,
+        content: r.content,
+        timestamp: r.timestamp,
+        avatarColor: r.avatar_color
+      }));
+    } else {
+      const dbData = readDb();
+      return dbData.messages.filter(m => m.channel_id === channelId).map(r => ({
+        id: r.id,
+        sender: r.sender,
+        content: r.content,
+        timestamp: r.timestamp,
+        avatarColor: r.avatarColor
+      }));
+    }
+  },
+
+  // Отправить сообщение~~
+  addMessage: async (channelId, sender, content, timestamp, avatarColor) => {
+    if (isPostgres) {
+      const res = await pgPool.query(
+        'INSERT INTO messages (channel_id, sender, content, timestamp, avatar_color) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+        [channelId, sender, content, timestamp, avatarColor]
+      );
+      const r = res.rows[0];
+      return { id: r.id, sender: r.sender, content: r.content, timestamp: r.timestamp, avatarColor: r.avatar_color };
+    } else {
+      const dbData = readDb();
+      const newMsg = { id: dbData.messages.length + 1, channel_id: channelId, sender, content, timestamp, avatarColor };
+      dbData.messages.push(newMsg);
+      writeDb(dbData);
+      return newMsg;
+    }
+  },
+
+  // Получить друзей~~
+  getFriends: async (userId) => {
+    if (isPostgres) {
+      const res = await pgPool.query('SELECT * FROM friends WHERE user_id = $1', [userId]);
+      return res.rows.map(r => ({ friend_username: r.friend_username, status: r.status, customStatus: r.custom_status, relation: r.relation }));
+    } else {
+      const dbData = readDb();
+      return dbData.friends.filter(f => f.user_id === userId).map(r => ({ friend_username: r.friend_username, status: r.status, customStatus: r.customStatus, relation: r.relation }));
+    }
+  },
+
+  // Добавить начальных друзей~~
+  addInitialFriends: async (userId) => {
+    const initial = [
+      { friend_username: 'foxy_boi', custom_status: 'playing with yarn 🧶', relation: 'friend' },
+      { friend_username: 'meow_master', custom_status: 'coding react apps... meow~', relation: 'friend' },
+      { friend_username: 'code_fox', custom_status: 'do not disturb, compilation running! 💻', relation: 'friend' },
+      { friend_username: 'fluffy_tail', custom_status: 'sleeping in the woods 😴', relation: 'friend' },
+      { friend_username: 'nyan_cat', custom_status: 'flying in space 🌈', relation: 'friend' },
+      { friend_username: 'new_furry', custom_status: 'looking for friends :3', relation: 'pending_incoming' }
     ];
-    writeDb(dbData);
-    console.log('дефолтные сообщения успешно созданы, ня~~');
+
+    if (isPostgres) {
+      const q = 'INSERT INTO friends (user_id, friend_username, status, custom_status, relation) VALUES ($1, $2, $3, $4, $5)';
+      for (const f of initial) {
+        await pgPool.query(q, [userId, f.friend_username, 'online', f.custom_status, f.relation]);
+      }
+    } else {
+      const dbData = readDb();
+      dbData.friends.push(...initial.map((f, idx) => ({
+        id: Date.now() + idx,
+        user_id: userId,
+        friend_username: f.friend_username,
+        status: 'online',
+        customStatus: f.custom_status,
+        relation: f.relation
+      })));
+      writeDb(dbData);
+    }
+  },
+
+  // Добавить запрос в друзья~~
+  addFriendRequest: async (userId, friendUserId, friendUsername, currentUsername) => {
+    if (isPostgres) {
+      await pgPool.query('INSERT INTO friends (user_id, friend_username, relation) VALUES ($1, $2, $3)', [userId, friendUsername, 'pending_outgoing']);
+      await pgPool.query('INSERT INTO friends (user_id, friend_username, relation) VALUES ($1, $2, $3)', [friendUserId, currentUsername, 'pending_incoming']);
+    } else {
+      const dbData = readDb();
+      dbData.friends.push({ id: Date.now() + 10, user_id: userId, friend_username: friendUsername, status: 'offline', customStatus: 'just joined discord-clone! 🎉', relation: 'pending_outgoing' });
+      dbData.friends.push({ id: Date.now() + 20, user_id: friendUserId, friend_username: currentUsername, status: 'online', customStatus: '', relation: 'pending_incoming' });
+      writeDb(dbData);
+    }
+  },
+
+  // Проверка связи друзей~~
+  hasFriendRow: async (userId, friendUsername) => {
+    if (isPostgres) {
+      const res = await pgPool.query('SELECT * FROM friends WHERE user_id = $1 AND LOWER(friend_username) = LOWER($2)', [userId, friendUsername]);
+      return res.rows.length > 0;
+    } else {
+      const dbData = readDb();
+      return dbData.friends.some(f => f.user_id === userId && f.friend_username.toLowerCase() === friendUsername.toLowerCase());
+    }
+  },
+
+  // Принять друга~~
+  acceptFriendRequest: async (userId, friendUsername, friendUserId, currentUsername) => {
+    if (isPostgres) {
+      await pgPool.query("UPDATE friends SET relation = 'friend', status = 'online' WHERE user_id = $1 AND friend_username = $2", [userId, friendUsername]);
+      await pgPool.query("UPDATE friends SET relation = 'friend', status = 'online' WHERE user_id = $1 AND friend_username = $2", [friendUserId, currentUsername]);
+    } else {
+      const dbData = readDb();
+      dbData.friends = dbData.friends.map(f => (f.user_id === userId && f.friend_username === friendUsername) ? { ...f, relation: 'friend', status: 'online' } : f);
+      dbData.friends = dbData.friends.map(f => (f.user_id === friendUserId && f.friend_username === currentUsername) ? { ...f, relation: 'friend', status: 'online' } : f);
+      writeDb(dbData);
+    }
+  },
+
+  // Удалить/Отклонить друга~~
+  removeFriend: async (userId, friendUsername, friendUserId, currentUsername) => {
+    if (isPostgres) {
+      await pgPool.query('DELETE FROM friends WHERE user_id = $1 AND friend_username = $2', [userId, friendUsername]);
+      await pgPool.query('DELETE FROM friends WHERE user_id = $1 AND friend_username = $2', [friendUserId, currentUsername]);
+    } else {
+      let dbData = readDb();
+      dbData.friends = dbData.friends.filter(f => !(f.user_id === userId && f.friend_username === friendUsername));
+      dbData.friends = dbData.friends.filter(f => !(f.user_id === friendUserId && f.friend_username === currentUsername));
+      writeDb(dbData);
+    }
+  },
+
+  // Заблокировать друга~~
+  blockFriend: async (userId, friendUsername) => {
+    if (isPostgres) {
+      await pgPool.query("UPDATE friends SET relation = 'blocked' WHERE user_id = $1 AND friend_username = $2", [userId, friendUsername]);
+    } else {
+      const dbData = readDb();
+      dbData.friends = dbData.friends.map(f => (f.user_id === userId && f.friend_username === friendUsername) ? { ...f, relation: 'blocked' } : f);
+      writeDb(dbData);
+    }
   }
-}
+};
 
-// запускаем инициализацию базы данных~~
-initializeDb();
+// Запускаем инициализацию базы данных~~
+db.init().then(() => {
+  console.log('база данных успешно инициализирована! мяуу~~');
+}).catch(e => {
+  console.error('ошибка при инициализации базы данных:', e);
+});
 
-// мидлварь для проверки токена авторизации~~
+// Мидлварь для проверки токена авторизации~~
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -83,308 +375,209 @@ const authenticateToken = (req, res, next) => {
 // --- ЭНДПОИНТЫ АВТОРИЗАЦИИ ---
 
 // регистрация~~
-app.post('/api/auth/register', (req, res) => {
+app.post('/api/auth/register', async (req, res) => {
   const { username, password, avatarColor, accentColor } = req.body;
   if (!username || !password) {
     return res.status(400).json({ error: 'введите ник и пароль!' });
   }
 
-  const dbData = readDb();
-  const exists = dbData.users.some(u => u.username.toLowerCase() === username.toLowerCase());
-  
-  if (exists) {
-    return res.status(400).json({ error: 'это имя пользователя уже занято!' });
+  try {
+    const exists = await db.getUserByUsername(username);
+    if (exists) {
+      return res.status(400).json({ error: 'это имя пользователя уже занято!' });
+    }
+
+    const hashedPassword = bcrypt.hashSync(password, 10);
+    const color = avatarColor || '#ff8da1';
+    const accent = accentColor || '#ff2d55';
+
+    const newUser = await db.addUser(username, hashedPassword, color, accent);
+    
+    // создаем начальных друзей~~
+    await db.addInitialFriends(newUser.id);
+
+    const token = jwt.sign({ id: newUser.id, username }, JWT_SECRET, { expiresIn: '7d' });
+    res.json({ token, user: { id: newUser.id, username, avatarColor: color, accentColor: accent, customStatus: '' } });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
-
-  const hashedPassword = bcrypt.hashSync(password, 10);
-  const color = avatarColor || '#ff8da1';
-  const accent = accentColor || '#ff2d55';
-
-  const newUser = {
-    id: dbData.users.length + 1,
-    username,
-    password: hashedPassword,
-    avatarColor: color,
-    accentColor: accent,
-    customStatus: ''
-  };
-
-  dbData.users.push(newUser);
-
-  // добавляем начальных друзей новому пользователю~~
-  const initialFriends = [
-    { id: Date.now() + 1, user_id: newUser.id, friend_username: 'foxy_boi', status: 'online', customStatus: 'playing with yarn 🧶', relation: 'friend' },
-    { id: Date.now() + 2, user_id: newUser.id, friend_username: 'meow_master', status: 'online', customStatus: 'coding react apps... meow~', relation: 'friend' },
-    { id: Date.now() + 3, user_id: newUser.id, friend_username: 'code_fox', status: 'dnd', customStatus: 'do not disturb, compilation running! 💻', relation: 'friend' },
-    { id: Date.now() + 4, user_id: newUser.id, friend_username: 'fluffy_tail', status: 'offline', customStatus: 'sleeping in the woods 😴', relation: 'friend' },
-    { id: Date.now() + 5, user_id: newUser.id, friend_username: 'nyan_cat', status: 'idle', customStatus: 'flying in space 🌈', relation: 'friend' },
-    { id: Date.now() + 6, user_id: newUser.id, friend_username: 'new_furry', status: 'online', customStatus: 'looking for friends :3', relation: 'pending_incoming' }
-  ];
-
-  dbData.friends.push(...initialFriends);
-  writeDb(dbData);
-
-  const token = jwt.sign({ id: newUser.id, username }, JWT_SECRET, { expiresIn: '7d' });
-  res.json({ token, user: { id: newUser.id, username, avatarColor: color, accentColor: accent, customStatus: '' } });
 });
 
 // вход~~
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) {
     return res.status(400).json({ error: 'введите ник и пароль!' });
   }
 
-  const dbData = readDb();
-  const user = dbData.users.find(u => u.username.toLowerCase() === username.toLowerCase());
-
-  if (!user) {
-    return res.status(400).json({ error: 'пользователь не найден!' });
-  }
-
-  const isPasswordValid = bcrypt.compareSync(password, user.password);
-  if (!isPasswordValid) {
-    return res.status(400).json({ error: 'неверный пароль!' });
-  }
-
-  const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
-  res.json({
-    token,
-    user: {
-      id: user.id,
-      username: user.username,
-      avatarColor: user.avatarColor,
-      accentColor: user.accentColor,
-      customStatus: user.customStatus
+  try {
+    const user = await db.getUserByUsername(username);
+    if (!user) {
+      return res.status(400).json({ error: 'пользователь не найден!' });
     }
-  });
+
+    const isPasswordValid = bcrypt.compareSync(password, user.password);
+    if (!isPasswordValid) {
+      return res.status(400).json({ error: 'неверный пароль!' });
+    }
+
+    const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        avatarColor: user.avatarColor,
+        accentColor: user.accentColor,
+        customStatus: user.customStatus
+      }
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
-// получение своего профиля по токену~~
-app.get('/api/auth/me', authenticateToken, (req, res) => {
-  const dbData = readDb();
-  const user = dbData.users.find(u => u.id === req.user.id);
-  if (!user) return res.status(404).json({ error: 'профиль не найден!' });
-  
-  res.json({
-    id: user.id,
-    username: user.username,
-    avatarColor: user.avatarColor,
-    accentColor: user.accentColor,
-    customStatus: user.customStatus
-  });
+// получение профиля~~
+app.get('/api/auth/me', authenticateToken, async (req, res) => {
+  try {
+    const user = await db.getUserById(req.user.id);
+    if (!user) return res.status(404).json({ error: 'профиль не найден!' });
+    res.json(user);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
-// обновление настроек профиля~~
-app.put('/api/auth/profile', authenticateToken, (req, res) => {
+// обновление профиля~~
+app.put('/api/auth/profile', authenticateToken, async (req, res) => {
   const { username, customStatus, avatarColor, accentColor } = req.body;
-  const dbData = readDb();
+  
+  try {
+    const taken = await db.isUsernameTaken(req.user.id, username);
+    if (taken) {
+      return res.status(400).json({ error: 'это имя пользователя уже занято!' });
+    }
 
-  // проверяем, не занят ли ник кем-то другим~~
-  const taken = dbData.users.some(u => u.id !== req.user.id && u.username.toLowerCase() === username.toLowerCase());
-  if (taken) {
-    return res.status(400).json({ error: 'это имя пользователя уже занято!' });
+    const updated = await db.updateUserProfile(req.user.id, username, customStatus, avatarColor, accentColor);
+    res.json({ success: true, user: updated });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
-
-  const userIndex = dbData.users.findIndex(u => u.id === req.user.id);
-  if (userIndex === -1) return res.status(404).json({ error: 'пользователь не найден!' });
-
-  const oldUsername = dbData.users[userIndex].username;
-
-  dbData.users[userIndex] = {
-    ...dbData.users[userIndex],
-    username,
-    customStatus,
-    avatarColor,
-    accentColor
-  };
-
-  // если изменился ник, обновляем имя во всех записях друзей и сообщений~~
-  if (oldUsername !== username) {
-    dbData.friends = dbData.friends.map(f => {
-      if (f.friend_username === oldUsername) {
-        return { ...f, friend_username: username };
-      }
-      return f;
-    });
-
-    dbData.messages = dbData.messages.map(m => {
-      if (m.sender === oldUsername) {
-        return { ...m, sender: username };
-      }
-      return m;
-    });
-  }
-
-  writeDb(dbData);
-  res.json({ success: true, user: { id: req.user.id, username, customStatus, avatarColor, accentColor } });
 });
 
 // --- ЭНДПОИНТЫ СООБЩЕНИЙ ---
 
-// получение сообщений канала / лс~~
-app.get('/api/messages/:channelId', authenticateToken, (req, res) => {
-  const channelId = req.params.channelId;
-  const dbData = readDb();
-  const rows = dbData.messages.filter(m => m.channel_id === channelId);
-  res.json(rows);
+// получение сообщений~~
+app.get('/api/messages/:channelId', authenticateToken, async (req, res) => {
+  try {
+    const rows = await db.getMessages(req.params.channelId);
+    res.json(rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // отправка сообщения~~
-app.post('/api/messages', authenticateToken, (req, res) => {
+app.post('/api/messages', authenticateToken, async (req, res) => {
   const { channelId, content, avatarColor } = req.body;
   const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const dbData = readDb();
+  
+  try {
+    const newMsg = await db.addMessage(channelId, req.user.username, content, timeStr, avatarColor);
+    res.json(newMsg);
 
-  const newMsg = {
-    id: dbData.messages.length + 1,
-    channel_id: channelId,
-    sender: req.user.username,
-    content,
-    timestamp: timeStr,
-    avatarColor
-  };
-
-  dbData.messages.push(newMsg);
-  writeDb(dbData);
-  res.json(newMsg);
-
-  // имитируем авто-ответ бота на бэкенде~~
-  const normalizedContent = content.toLowerCase();
-  if (normalizedContent.includes('привет') || normalizedContent.includes('hello') || normalizedContent.includes('femboy')) {
-    setTimeout(() => {
-      const liveDb = readDb();
-      const botName = 'foxy_boi';
-      const botTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      const botText = 'привееет! мяууу~~ как твои дела? *виляет хвостиком* :3';
-      
-      const botMsg = {
-        id: liveDb.messages.length + 1,
-        channel_id: channelId,
-        sender: botName,
-        content: botText,
-        timestamp: botTime,
-        avatarColor: '#3BA55D'
-      };
-
-      liveDb.messages.push(botMsg);
-      writeDb(liveDb);
-    }, 1500);
+    // авто-ответ бота на сообщения~~
+    const normalizedContent = content.toLowerCase();
+    if (normalizedContent.includes('привет') || normalizedContent.includes('hello') || normalizedContent.includes('femboy')) {
+      setTimeout(async () => {
+        try {
+          const botTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          const botText = 'привееет! мяууу~~ как твои дела? *виляет хвостиком* :3';
+          await db.addMessage(channelId, 'foxy_boi', botText, botTime, '#3BA55D');
+        } catch (err) {
+          console.error(err);
+        }
+      }, 1500);
+    }
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
 // --- ЭНДПОИНТЫ ДРУЗЕЙ ---
 
 // список друзей~~
-app.get('/api/friends', authenticateToken, (req, res) => {
-  const dbData = readDb();
-  const rows = dbData.friends.filter(f => f.user_id === req.user.id);
-  res.json(rows);
+app.get('/api/friends', authenticateToken, async (req, res) => {
+  try {
+    const rows = await db.getFriends(req.user.id);
+    res.json(rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
-// добавление друга~~
-app.post('/api/friends/add', authenticateToken, (req, res) => {
+// запрос дружбы~~
+app.post('/api/friends/add', authenticateToken, async (req, res) => {
   const { username } = req.body;
   if (!username) return res.status(400).json({ error: 'введите ник!' });
   if (username.toLowerCase() === req.user.username.toLowerCase()) {
     return res.status(400).json({ error: 'нельзя добавить самого себя!' });
   }
 
-  const dbData = readDb();
-  const targetUser = dbData.users.find(u => u.username.toLowerCase() === username.toLowerCase());
-  
-  if (!targetUser) return res.status(404).json({ error: 'пользователь не найден!' });
+  try {
+    const targetUser = await db.getUserByUsername(username);
+    if (!targetUser) return res.status(404).json({ error: 'пользователь не найден!' });
 
-  // проверяем, нет ли уже в друзьях~~
-  const alreadyFriend = dbData.friends.some(f => f.user_id === req.user.id && f.friend_username.toLowerCase() === username.toLowerCase());
-  if (alreadyFriend) return res.status(400).json({ error: 'вы уже отправляли запрос или дружите!' });
+    const alreadyFriend = await db.hasFriendRow(req.user.id, username);
+    if (alreadyFriend) return res.status(400).json({ error: 'вы уже отправляли запрос или дружите!' });
 
-  // добавляем исходящий запрос себе~~
-  dbData.friends.push({
-    id: Date.now() + 10,
-    user_id: req.user.id,
-    friend_username: targetUser.username,
-    status: 'offline',
-    customStatus: 'just joined discord-clone! 🎉',
-    relation: 'pending_outgoing'
-  });
-
-  // добавляем входящий запрос второму участнику~~
-  dbData.friends.push({
-    id: Date.now() + 20,
-    user_id: targetUser.id,
-    friend_username: req.user.username,
-    status: 'online',
-    customStatus: '',
-    relation: 'pending_incoming'
-  });
-
-  writeDb(dbData);
-  res.json({ success: true, message: 'запрос отправлен!' });
-});
-
-// принятие запроса~~
-app.post('/api/friends/accept', authenticateToken, (req, res) => {
-  const { friendUsername } = req.body;
-  const dbData = readDb();
-
-  dbData.friends = dbData.friends.map(f => {
-    if (f.user_id === req.user.id && f.friend_username === friendUsername) {
-      return { ...f, relation: 'friend', status: 'online' };
-    }
-    return f;
-  });
-
-  // обновляем запись у второго человека~~
-  const friendUser = dbData.users.find(u => u.username === friendUsername);
-  if (friendUser) {
-    dbData.friends = dbData.friends.map(f => {
-      if (f.user_id === friendUser.id && f.friend_username === req.user.username) {
-        return { ...f, relation: 'friend', status: 'online' };
-      }
-      return f;
-    });
+    await db.addFriendRequest(req.user.id, targetUser.id, targetUser.username, req.user.username);
+    res.json({ success: true, message: 'запрос отправлен!' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
-
-  writeDb(dbData);
-  res.json({ success: true });
 });
 
-// удаление / отклонение запроса~~
-app.post('/api/friends/remove', authenticateToken, (req, res) => {
+// принять запрос~~
+app.post('/api/friends/accept', authenticateToken, async (req, res) => {
   const { friendUsername } = req.body;
-  let dbData = readDb();
-
-  dbData.friends = dbData.friends.filter(f => !(f.user_id === req.user.id && f.friend_username === friendUsername));
-
-  const friendUser = dbData.users.find(u => u.username === friendUsername);
-  if (friendUser) {
-    dbData.friends = dbData.friends.filter(f => !(f.user_id === friendUser.id && f.friend_username === req.user.username));
-  }
-
-  writeDb(dbData);
-  res.json({ success: true });
-});
-
-// блокировка пользователя~~
-app.post('/api/friends/block', authenticateToken, (req, res) => {
-  const { friendUsername } = req.body;
-  const dbData = readDb();
-
-  dbData.friends = dbData.friends.map(f => {
-    if (f.user_id === req.user.id && f.friend_username === friendUsername) {
-      return { ...f, relation: 'blocked' };
+  try {
+    const friendUser = await db.getUserByUsername(friendUsername);
+    if (friendUser) {
+      await db.acceptFriendRequest(req.user.id, friendUsername, friendUser.id, req.user.username);
     }
-    return f;
-  });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
-  writeDb(dbData);
-  res.json({ success: true });
+// удалить/отклонить запрос~~
+app.post('/api/friends/remove', authenticateToken, async (req, res) => {
+  const { friendUsername } = req.body;
+  try {
+    const friendUser = await db.getUserByUsername(friendUsername);
+    if (friendUser) {
+      await db.removeFriend(req.user.id, friendUsername, friendUser.id, req.user.username);
+    }
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// заблокировать~~
+app.post('/api/friends/block', authenticateToken, async (req, res) => {
+  const { friendUsername } = req.body;
+  try {
+    await db.blockFriend(req.user.id, friendUsername);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // --- СТАТИКА ДЛЯ ПРОДАКШЕНА (RAILWAY.COM) ---
-
-// раздаем статические файлы фронтенда после сборки~~
 const distPath = path.join(__dirname, 'dist');
 if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));
