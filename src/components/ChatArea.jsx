@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from '../store/useStore';
 import { useNavigate } from 'react-router-dom';
-import { Hash, Search, Send, User, Paperclip } from 'lucide-react';
+import { Hash, Search, Send, User, Paperclip, Smile, CornerUpLeft, Pencil, X } from 'lucide-react';
 
 // компонент для виджета приглашений на приватные серверы~~ мяу! 🐾
 function ServerInviteCard({ serverId }) {
@@ -150,9 +150,24 @@ function ServerInviteCard({ serverId }) {
 // а еще тут можно писать милые штучки хозяину... owo 🐾
 
 export default function ChatArea() {
-  const { activeServerId, activeChannelId, activeDmUser, servers, messages, sendMessage, userProfile, viewUserProfile } = useStore();
+  const { 
+    activeServerId, 
+    activeChannelId, 
+    activeDmUser, 
+    servers, 
+    messages, 
+    sendMessage, 
+    userProfile, 
+    viewUserProfile,
+    addReaction,
+    removeReaction
+  } = useStore();
+  
   const [inputText, setInputText] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [replyToMessage, setReplyToMessage] = useState(null); // сообщение, на которое отвечаем~~
+  const [showReactionPicker, setShowReactionPicker] = useState(null); // id сообщения для поповера реакций~~
+  
   const messagesEndRef = useRef(null);
 
   // вычисляем ключ чата: для ЛС это симметричный ключ dm_user1_user2, для серверов просто id канала~~
@@ -197,11 +212,12 @@ export default function ChatArea() {
   const handleSend = (e) => {
     e.preventDefault();
     if (!inputText.trim()) return;
-    sendMessage(chatKey, inputText.trim(), isDm);
+    sendMessage(chatKey, inputText.trim(), isDm, replyToMessage?.id);
     setInputText('');
+    setReplyToMessage(null); // сбрасываем состояние ответа после отправки~~
   };
 
-  // мяууу~~ загрузка картинки в чатик!
+  // мяууу~~ загрузка картинки в чатик с поддержкой ответа!
   const handleChatImageChange = (e) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -211,10 +227,20 @@ export default function ChatArea() {
       }
       const reader = new FileReader();
       reader.onloadend = () => {
-        sendMessage(chatKey, reader.result, isDm);
+        sendMessage(chatKey, reader.result, isDm, replyToMessage?.id);
+        setReplyToMessage(null); // сбрасываем ответ~~
       };
       reader.readAsDataURL(file);
       e.target.value = '';
+    }
+  };
+
+  // обработка клика на реакцию (переключалка)~~
+  const handleReactionClick = (messageId, emoji, hasReacted) => {
+    if (hasReacted) {
+      removeReaction(chatKey, messageId, emoji);
+    } else {
+      addReaction(chatKey, messageId, emoji);
     }
   };
 
@@ -303,24 +329,133 @@ export default function ChatArea() {
           )}
 
           {filteredMessages.map(msg => (
-            <div key={msg.id} className="message-item">
-              <div 
-                className="message-avatar" 
-                style={{ backgroundColor: msg.avatarColor || '#ff8da1', cursor: 'pointer' }}
-                onClick={() => viewUserProfile(msg.sender)}
-              >
-                {msg.avatarUrl ? (
-                  <img src={msg.avatarUrl} alt={msg.sender} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
-                ) : (
-                  msg.sender.substring(0, 2)
-                )}
-              </div>
-              <div className="message-content-wrapper">
-                <div className="message-sender-meta">
-                  <span className="message-sender" style={{ cursor: 'pointer' }} onClick={() => viewUserProfile(msg.sender)}>{msg.displayName || msg.sender}</span>
-                  <span className="message-time">{msg.timestamp}</span>
+            <div key={msg.id} className={`message-item ${msg.replyToId ? 'has-reply' : ''}`}>
+              {/* Поповер смайликов (пикер) для реакций~~ */}
+              {showReactionPicker === msg.id && (
+                <div className="reaction-picker-popover">
+                  <div className="reaction-picker-backdrop" onClick={() => setShowReactionPicker(null)} />
+                  <div className="reaction-picker-emojis">
+                    {['❤️', '🐢', '😋', '👍', '🔥', '🦊', '🐱', '🎉', '💡', '😭'].map(emoji => {
+                      const hasReacted = msg.reactions?.some(r => r.emoji === emoji && r.username === userProfile.username);
+                      return (
+                        <button
+                          key={emoji}
+                          className="reaction-picker-emoji-btn"
+                          onClick={() => {
+                            handleReactionClick(msg.id, emoji, hasReacted);
+                            setShowReactionPicker(null);
+                          }}
+                        >
+                          {emoji}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-                {renderMessageContent(msg.content)}
+              )}
+
+              {/* Тулбар при наведении на сообщение~~ */}
+              <div className="message-toolbar">
+                <div className="quick-reactions">
+                  {['❤️', '🐢', '😋'].map(emoji => {
+                    const hasReacted = msg.reactions?.some(r => r.emoji === emoji && r.username === userProfile.username);
+                    return (
+                      <button 
+                        key={emoji} 
+                        onClick={() => handleReactionClick(msg.id, emoji, hasReacted)}
+                        className={hasReacted ? 'active-quick-react' : ''}
+                      >
+                        {emoji}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="toolbar-divider" />
+                <div className="action-buttons">
+                  <button className="toolbar-btn" onClick={() => setShowReactionPicker(msg.id)} title="Добавить реакцию">
+                    <Smile size={16} />
+                  </button>
+                  <button className="toolbar-btn" onClick={() => setReplyToMessage(msg)} title="Ответить">
+                    <CornerUpLeft size={16} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Рендеринг ответа сверху, если привязано к родителю~~ */}
+              {msg.replyToId && (
+                <div className="message-reply-preview-container">
+                  <div className="message-reply-line" />
+                  <div 
+                    className="reply-avatar-small" 
+                    style={{ backgroundColor: msg.replyToAvatarColor || '#ff8da1' }}
+                  >
+                    {msg.replyToAvatarUrl ? (
+                      <img src={msg.replyToAvatarUrl} alt={msg.replyToSender} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                    ) : (
+                      (msg.replyToDisplayName || msg.replyToSender || '??').substring(0, 1)
+                    )}
+                  </div>
+                  <span className="reply-sender">@{msg.replyToDisplayName || msg.replyToSender}</span>
+                  <span className="reply-content">
+                    {msg.replyToContent?.startsWith('data:image/') ? (
+                      <span style={{ fontStyle: 'italic', opacity: 0.85 }}>Нажмите, чтобы посмотреть вложение 🖼️</span>
+                    ) : (
+                      msg.replyToContent
+                    )}
+                  </span>
+                </div>
+              )}
+
+              {/* Основное тело сообщения с авой и контентом~~ */}
+              <div className="message-row-layout">
+                <div 
+                  className="message-avatar" 
+                  style={{ backgroundColor: msg.avatarColor || '#ff8da1', cursor: 'pointer' }}
+                  onClick={() => viewUserProfile(msg.sender)}
+                >
+                  {msg.avatarUrl ? (
+                    <img src={msg.avatarUrl} alt={msg.sender} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                  ) : (
+                    msg.sender.substring(0, 2)
+                  )}
+                </div>
+                <div className="message-content-wrapper">
+                  <div className="message-sender-meta">
+                    <span className="message-sender" style={{ cursor: 'pointer' }} onClick={() => viewUserProfile(msg.sender)}>{msg.displayName || msg.sender}</span>
+                    <span className="message-time">{msg.timestamp}</span>
+                  </div>
+                  {renderMessageContent(msg.content)}
+
+                  {/* Рендерим реакции под сообщением, если они есть~~ */}
+                  {msg.reactions && msg.reactions.length > 0 && (
+                    <div className="message-reactions-container">
+                      {Object.entries(
+                        msg.reactions.reduce((acc, r) => {
+                          if (!acc[r.emoji]) acc[r.emoji] = [];
+                          acc[r.emoji].push(r.username);
+                          return acc;
+                        }, {})
+                      ).map(([emoji, usernames]) => {
+                        const hasReacted = usernames.includes(userProfile.username);
+                        return (
+                          <button
+                            key={emoji}
+                            className={`message-reaction-btn ${hasReacted ? 'active' : ''}`}
+                            onClick={() => handleReactionClick(msg.id, emoji, hasReacted)}
+                            title={`Реагировали: ${usernames.join(', ')}`}
+                          >
+                            <span className="reaction-emoji">{emoji}</span>
+                            <span className="reaction-count">{usernames.length}</span>
+                          </button>
+                        );
+                      })}
+                      <button className="add-reaction-inline-btn" onClick={() => setShowReactionPicker(msg.id)} title="Добавить реакцию">
+                        <Smile size={14} />
+                        <span>+</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           ))}
@@ -328,8 +463,18 @@ export default function ChatArea() {
         </div>
       </div>
 
-      {/* форма ввода сообщения~~ */}
+      {/* форма ввода сообщения с панелькой ответа~~ */}
       <form onSubmit={handleSend} className="chat-input-form">
+        {replyToMessage && (
+          <div className="reply-bar">
+            <div className="reply-bar-text">
+              Ответ пользователю <span className="reply-bar-username">@{replyToMessage.displayName || replyToMessage.sender}</span>
+            </div>
+            <button type="button" className="reply-bar-close" onClick={() => setReplyToMessage(null)} title="Отменить ответ">
+              <X size={14} />
+            </button>
+          </div>
+        )}
         <div className="chat-input-wrapper">
           <input 
             type="text" 

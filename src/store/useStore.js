@@ -199,6 +199,26 @@ export const useStore = create((set, get) => ({
       }
     });
 
+    // слушаем обновление реакций~~ мяу!
+    socket.on('reaction_update', (data) => {
+      const { channelId, messageId, reactions } = data;
+      set((state) => {
+        const channelMessages = state.messages[channelId] || [];
+        const updated = channelMessages.map(m => {
+          if (m.id === messageId) {
+            return { ...m, reactions };
+          }
+          return m;
+        });
+        return {
+          messages: {
+            ...state.messages,
+            [channelId]: updated
+          }
+        };
+      });
+    });
+
     socket.on('friend', (data) => {
       get().fetchFriends();
       if (data.type === 'request') {
@@ -479,7 +499,7 @@ export const useStore = create((set, get) => ({
 
   // --- ОТПРАВКА СООБЩЕНИЙ В БД ---
   
-  sendMessage: async (channelId, content, isDm = false) => {
+  sendMessage: async (channelId, content, isDm = false, replyToId = null) => {
     const user = get().userProfile;
     try {
       // 1. отправляем наше сообщение в базу на сервере~~
@@ -488,7 +508,8 @@ export const useStore = create((set, get) => ({
         body: JSON.stringify({
           channelId,
           content,
-          avatarColor: user.avatarColor
+          avatarColor: user.avatarColor,
+          replyToId // передаем ID сообщения, на которое отвечаем~~
         })
       });
 
@@ -506,6 +527,61 @@ export const useStore = create((set, get) => ({
       });
     } catch (e) {
       console.error('ошибка отправки сообщения:', e);
+    }
+  },
+
+  // добавляем реакцию на сообщение~~ мяу!
+  addReaction: async (channelId, messageId, emoji) => {
+    try {
+      const res = await apiFetch(`/api/messages/${messageId}/reactions`, {
+        method: 'POST',
+        body: JSON.stringify({ emoji })
+      });
+      // оптимистично обновляем стейт для мгновенного отклика UI~~
+      set((state) => {
+        const channelMessages = state.messages[channelId] || [];
+        const updated = channelMessages.map(m => {
+          if (m.id === messageId) {
+            return { ...m, reactions: res.reactions };
+          }
+          return m;
+        });
+        return {
+          messages: {
+            ...state.messages,
+            [channelId]: updated
+          }
+        };
+      });
+    } catch (e) {
+      console.error('ошибка при добавлении реакции:', e);
+    }
+  },
+
+  // убираем реакцию с сообщения~~
+  removeReaction: async (channelId, messageId, emoji) => {
+    try {
+      const res = await apiFetch(`/api/messages/${messageId}/reactions`, {
+        method: 'DELETE',
+        body: JSON.stringify({ emoji })
+      });
+      set((state) => {
+        const channelMessages = state.messages[channelId] || [];
+        const updated = channelMessages.map(m => {
+          if (m.id === messageId) {
+            return { ...m, reactions: res.reactions };
+          }
+          return m;
+        });
+        return {
+          messages: {
+            ...state.messages,
+            [channelId]: updated
+          }
+        };
+      });
+    } catch (e) {
+      console.error('ошибка при удалении реакции:', e);
     }
   },
 

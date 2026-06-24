@@ -129,7 +129,22 @@ const db = {
             sender VARCHAR(50) NOT NULL,
             content TEXT NOT NULL,
             timestamp VARCHAR(20) NOT NULL,
-            avatar_color VARCHAR(10) DEFAULT '#ff8da1'
+            avatar_color VARCHAR(10) DEFAULT '#ff8da1',
+            reply_to_id INTEGER REFERENCES messages(id) ON DELETE SET NULL
+          )
+        `);
+        try {
+          await client.query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS reply_to_id INTEGER REFERENCES messages(id) ON DELETE SET NULL');
+        } catch (e) {
+          console.log('ошибка при добавлении reply_to_id к messages:', e.message);
+        }
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS message_reactions (
+            id SERIAL PRIMARY KEY,
+            message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+            username VARCHAR(50) NOT NULL,
+            emoji VARCHAR(50) NOT NULL,
+            UNIQUE(message_id, username, emoji)
           )
         `);
         await client.query(`
@@ -370,52 +385,171 @@ const db = {
   // Получить сообщения~~
   getMessages: async (channelId) => {
     if (isPostgres) {
+      // 1. Получаем сообщения с инфой об ответе~~
       const res = await pgPool.query(`
-        SELECT m.id, m.sender, m.content, m.timestamp, u.avatar_color, u.avatar_url
+        SELECT m.id, m.sender, m.content, m.timestamp, u.avatar_color, u.avatar_url, u.display_name,
+               m.reply_to_id,
+               rm.sender AS reply_to_sender,
+               rm.content AS reply_to_content,
+               ru.display_name AS reply_to_display_name,
+               ru.avatar_color AS reply_to_avatar_color,
+               ru.avatar_url AS reply_to_avatar_url
         FROM messages m
         LEFT JOIN users u ON LOWER(u.username) = LOWER(m.sender)
+        LEFT JOIN messages rm ON rm.id = m.reply_to_id
+        LEFT JOIN users ru ON LOWER(ru.username) = LOWER(rm.sender)
         WHERE m.channel_id = $1
         ORDER BY m.id ASC
       `, [channelId]);
+
+      // 2. Получаем все реакции для сообщений этого канала~~
+      const reactionsRes = await pgPool.query(`
+        SELECT r.message_id, r.username, r.emoji
+        FROM message_reactions r
+        JOIN messages m ON m.id = r.message_id
+        WHERE m.channel_id = $1
+      `, [channelId]);
+
+      // группируем их по message_id~~
+      const reactionsMap = {};
+      reactionsRes.rows.forEach(r => {
+        if (!reactionsMap[r.message_id]) {
+          reactionsMap[r.message_id] = [];
+        }
+        reactionsMap[r.message_id].push({ emoji: r.emoji, username: r.username });
+      });
+
       return res.rows.map(r => ({
         id: r.id,
         sender: r.sender,
         content: r.content,
         timestamp: r.timestamp,
         avatarColor: r.avatar_color || '#ff8da1',
-        avatarUrl: r.avatar_url || ''
+        avatarUrl: r.avatar_url || '',
+        displayName: r.display_name || r.sender,
+        replyToId: r.reply_to_id || null,
+        replyToSender: r.reply_to_sender || null,
+        replyToContent: r.reply_to_content || null,
+        replyToDisplayName: r.reply_to_display_name || null,
+        replyToAvatarColor: r.reply_to_avatar_color || '#ff8da1',
+        replyToAvatarUrl: r.reply_to_avatar_url || '',
+        reactions: reactionsMap[r.id] || []
       }));
     } else {
       const dbData = readDb();
       return dbData.messages.filter(m => m.channel_id === channelId).map(r => {
         const u = dbData.users.find(usr => usr.username.toLowerCase() === r.sender.toLowerCase());
+        
+        let replyToSender = null;
+        let replyToContent = null;
+        let replyToDisplayName = null;
+        let replyToAvatarColor = '#ff8da1';
+        let replyToAvatarUrl = '';
+        if (r.reply_to_id) {
+          const origMsg = dbData.messages.find(m => m.id === r.reply_to_id);
+          if (origMsg) {
+            replyToSender = origMsg.sender;
+            replyToContent = origMsg.content;
+            const ru = dbData.users.find(usr => usr.username.toLowerCase() === origMsg.sender.toLowerCase());
+            replyToDisplayName = ru ? (ru.displayName || ru.username) : origMsg.sender;
+            replyToAvatarColor = ru ? (ru.avatarColor || '#ff8da1') : '#ff8da1';
+            replyToAvatarUrl = ru ? (ru.avatarUrl || '') : '';
+          }
+        }
+
         return {
           id: r.id,
           sender: r.sender,
           content: r.content,
           timestamp: r.timestamp,
           avatarColor: u ? u.avatarColor : (r.avatarColor || '#ff8da1'),
-          avatarUrl: u ? (u.avatarUrl || '') : ''
+          avatarUrl: u ? (u.avatarUrl || '') : '',
+          displayName: u ? (u.displayName || u.username) : r.sender,
+          replyToId: r.reply_to_id || null,
+          replyToSender,
+          replyToContent,
+          replyToDisplayName,
+          replyToAvatarColor,
+          replyToAvatarUrl,
+          reactions: r.reactions || []
         };
       });
     }
   },
 
   // Отправить сообщение~~
-  addMessage: async (channelId, sender, content, timestamp, avatarColor) => {
+  addMessage: async (channelId, sender, content, timestamp, avatarColor, replyToId = null) => {
     if (isPostgres) {
       const res = await pgPool.query(
-        'INSERT INTO messages (channel_id, sender, content, timestamp, avatar_color) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-        [channelId, sender, content, timestamp, avatarColor]
+        'INSERT INTO messages (channel_id, sender, content, timestamp, avatar_color, reply_to_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+        [channelId, sender, content, timestamp, avatarColor, replyToId]
       );
       const r = res.rows[0];
-      return { id: r.id, sender: r.sender, content: r.content, timestamp: r.timestamp, avatarColor: r.avatar_color };
+      return { id: r.id, sender: r.sender, content: r.content, timestamp: r.timestamp, avatarColor: r.avatar_color, replyToId: r.reply_to_id };
     } else {
       const dbData = readDb();
-      const newMsg = { id: dbData.messages.length + 1, channel_id: channelId, sender, content, timestamp, avatarColor };
+      const newMsg = { id: dbData.messages.length + 1, channel_id: channelId, sender, content, timestamp, avatarColor, reply_to_id: replyToId, reactions: [] };
       dbData.messages.push(newMsg);
       writeDb(dbData);
       return newMsg;
+    }
+  },
+
+  // Добавить реакцию~~
+  addReaction: async (messageId, username, emoji) => {
+    if (isPostgres) {
+      try {
+        await pgPool.query(
+          'INSERT INTO message_reactions (message_id, username, emoji) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
+          [messageId, username, emoji]
+        );
+      } catch (e) {
+        console.error('ошибка addReaction:', e.message);
+      }
+    } else {
+      const dbData = readDb();
+      const msg = dbData.messages.find(m => m.id === Number(messageId));
+      if (msg) {
+        if (!msg.reactions) msg.reactions = [];
+        if (!msg.reactions.some(r => r.emoji === emoji && r.username === username)) {
+          msg.reactions.push({ emoji, username });
+          writeDb(dbData);
+        }
+      }
+    }
+  },
+
+  // Удалить реакцию~~
+  removeReaction: async (messageId, username, emoji) => {
+    if (isPostgres) {
+      try {
+        await pgPool.query(
+          'DELETE FROM message_reactions WHERE message_id = $1 AND username = $2 AND emoji = $3',
+          [messageId, username, emoji]
+        );
+      } catch (e) {
+        console.error('ошибка removeReaction:', e.message);
+      }
+    } else {
+      const dbData = readDb();
+      const msg = dbData.messages.find(m => m.id === Number(messageId));
+      if (msg) {
+        if (!msg.reactions) msg.reactions = [];
+        msg.reactions = msg.reactions.filter(r => !(r.emoji === emoji && r.username === username));
+        writeDb(dbData);
+      }
+    }
+  },
+
+  // Получить все реакции сообщения~~
+  getReactions: async (messageId) => {
+    if (isPostgres) {
+      const res = await pgPool.query('SELECT username, emoji FROM message_reactions WHERE message_id = $1', [messageId]);
+      return res.rows.map(r => ({ emoji: r.emoji, username: r.username }));
+    } else {
+      const dbData = readDb();
+      const msg = dbData.messages.find(m => m.id === Number(messageId));
+      return msg ? (msg.reactions || []) : [];
     }
   },
 
@@ -1044,7 +1178,7 @@ app.get('/api/messages/:channelId', authenticateToken, async (req, res) => {
 
 // отправка сообщения~~
 app.post('/api/messages', authenticateToken, async (req, res) => {
-  const { channelId, content, avatarColor } = req.body;
+  const { channelId, content, avatarColor, replyToId } = req.body;
   const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   
   try {
@@ -1053,13 +1187,54 @@ app.post('/api/messages', authenticateToken, async (req, res) => {
     const resolvedAvatarUrl = senderUser ? (senderUser.avatarUrl || '') : '';
     const resolvedDisplayName = senderUser ? (senderUser.displayName || senderUser.username) : req.user.username;
 
-    const newMsg = await db.addMessage(channelId, req.user.username, content, timeStr, resolvedAvatarColor);
+    const newMsg = await db.addMessage(channelId, req.user.username, content, timeStr, resolvedAvatarColor, replyToId ? Number(replyToId) : null);
     
+    // Подгружаем данные исходного сообщения, если это ответ~~
+    let replyToSender = null;
+    let replyToContent = null;
+    let replyToDisplayName = null;
+    let replyToAvatarColor = '#ff8da1';
+    let replyToAvatarUrl = '';
+    const actualReplyId = newMsg.replyToId || newMsg.reply_to_id;
+    if (actualReplyId) {
+      if (isPostgres) {
+        const origRes = await pgPool.query(
+          'SELECT m.sender, m.content, u.display_name, u.avatar_color, u.avatar_url FROM messages m LEFT JOIN users u ON LOWER(u.username) = LOWER(m.sender) WHERE m.id = $1',
+          [actualReplyId]
+        );
+        if (origRes.rows.length > 0) {
+          replyToSender = origRes.rows[0].sender;
+          replyToContent = origRes.rows[0].content;
+          replyToDisplayName = origRes.rows[0].display_name || origRes.rows[0].sender;
+          replyToAvatarColor = origRes.rows[0].avatar_color || '#ff8da1';
+          replyToAvatarUrl = origRes.rows[0].avatar_url || '';
+        }
+      } else {
+        const dbData = readDb();
+        const origMsg = dbData.messages.find(m => m.id === actualReplyId);
+        if (origMsg) {
+          replyToSender = origMsg.sender;
+          replyToContent = origMsg.content;
+          const ru = dbData.users.find(usr => usr.username.toLowerCase() === origMsg.sender.toLowerCase());
+          replyToDisplayName = ru ? (ru.displayName || ru.username) : origMsg.sender;
+          replyToAvatarColor = ru ? (ru.avatarColor || '#ff8da1') : '#ff8da1';
+          replyToAvatarUrl = ru ? (ru.avatarUrl || '') : '';
+        }
+      }
+    }
+
     const enrichedMsg = {
       ...newMsg,
       avatarColor: resolvedAvatarColor,
       avatarUrl: resolvedAvatarUrl,
-      displayName: resolvedDisplayName
+      displayName: resolvedDisplayName,
+      replyToId: actualReplyId || null,
+      replyToSender,
+      replyToContent,
+      replyToDisplayName,
+      replyToAvatarColor,
+      replyToAvatarUrl,
+      reactions: []
     };
     
     // мгновенно оповещаем участников по сокетам~~
@@ -1084,6 +1259,112 @@ app.post('/api/messages', authenticateToken, async (req, res) => {
     }
     
     res.json(enrichedMsg);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// добавление реакции~~
+app.post('/api/messages/:id/reactions', authenticateToken, async (req, res) => {
+  const messageId = Number(req.params.id);
+  const { emoji } = req.body;
+  const username = req.user.username;
+
+  try {
+    await db.addReaction(messageId, username, emoji);
+    const updatedReactions = await db.getReactions(messageId);
+
+    let channelId = '';
+    if (isPostgres) {
+      const msgRes = await pgPool.query('SELECT channel_id FROM messages WHERE id = $1', [messageId]);
+      if (msgRes.rows.length > 0) {
+        channelId = msgRes.rows[0].channel_id;
+      }
+    } else {
+      const dbData = readDb();
+      const msg = dbData.messages.find(m => m.id === messageId);
+      if (msg) {
+        channelId = msg.channel_id;
+      }
+    }
+
+    if (channelId) {
+      const eventData = { messageId, reactions: updatedReactions };
+      if (channelId.startsWith('dm_')) {
+        const dmPart = channelId.replace('dm_', '');
+        let recipient = '';
+        const senderLower = username.toLowerCase();
+        const dmPartLower = dmPart.toLowerCase();
+        
+        if (dmPartLower.startsWith(senderLower + '_')) {
+          recipient = dmPart.substring(senderLower.length + 1);
+        } else if (dmPartLower.endsWith('_' + senderLower)) {
+          recipient = dmPart.substring(0, dmPart.length - (senderLower.length + 1));
+        }
+
+        sendSseToUser(username, 'reaction_update', { channelId, ...eventData });
+        if (recipient) {
+          sendSseToUser(recipient, 'reaction_update', { channelId, ...eventData });
+        }
+      } else {
+        sendSseToAll('reaction_update', { channelId, ...eventData });
+      }
+    }
+
+    res.json({ success: true, reactions: updatedReactions });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// удаление реакции~~
+app.delete('/api/messages/:id/reactions', authenticateToken, async (req, res) => {
+  const messageId = Number(req.params.id);
+  const { emoji } = req.body;
+  const username = req.user.username;
+
+  try {
+    await db.removeReaction(messageId, username, emoji);
+    const updatedReactions = await db.getReactions(messageId);
+
+    let channelId = '';
+    if (isPostgres) {
+      const msgRes = await pgPool.query('SELECT channel_id FROM messages WHERE id = $1', [messageId]);
+      if (msgRes.rows.length > 0) {
+        channelId = msgRes.rows[0].channel_id;
+      }
+    } else {
+      const dbData = readDb();
+      const msg = dbData.messages.find(m => m.id === messageId);
+      if (msg) {
+        channelId = msg.channel_id;
+      }
+    }
+
+    if (channelId) {
+      const eventData = { messageId, reactions: updatedReactions };
+      if (channelId.startsWith('dm_')) {
+        const dmPart = channelId.replace('dm_', '');
+        let recipient = '';
+        const senderLower = username.toLowerCase();
+        const dmPartLower = dmPart.toLowerCase();
+        
+        if (dmPartLower.startsWith(senderLower + '_')) {
+          recipient = dmPart.substring(senderLower.length + 1);
+        } else if (dmPartLower.endsWith('_' + senderLower)) {
+          recipient = dmPart.substring(0, dmPart.length - (senderLower.length + 1));
+        }
+
+        sendSseToUser(username, 'reaction_update', { channelId, ...eventData });
+        if (recipient) {
+          sendSseToUser(recipient, 'reaction_update', { channelId, ...eventData });
+        }
+      } else {
+        sendSseToAll('reaction_update', { channelId, ...eventData });
+      }
+    }
+
+    res.json({ success: true, reactions: updatedReactions });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
