@@ -474,13 +474,14 @@ export default function VoiceCall() {
             {activeCall.isCameraOn ? <Video size={18} style={{ margin: 'auto' }} /> : <VideoOff size={18} style={{ margin: 'auto' }} />}
           </button>
 
+          {/* оййй тут кнопочка стрима экрана, проверяем localStream вместо опечатки~~ */}
           <button 
-            className={`call-btn ${screenStream ? 'active' : ''}`}
+            className={`call-btn ${localStream ? 'active' : ''}`}
             onClick={handleScreenShareClick}
-            title={screenStream ? "Прекратить стрим" : "Начать трансляцию экрана"}
-            style={{ width: 38, height: 38, borderRadius: '50%', border: 'none', backgroundColor: screenStream ? 'var(--discord-green)' : 'var(--background-sidebar)', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justify: 'center' }}
+            title={localStream ? "Прекратить стрим" : "Начать трансляцию экрана"}
+            style={{ width: 38, height: 38, borderRadius: '50%', border: 'none', backgroundColor: localStream ? 'var(--discord-green)' : 'var(--background-sidebar)', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justify: 'center' }}
           >
-            {screenStream ? <Monitor size={18} style={{ margin: 'auto' }} /> : <MonitorOff size={18} style={{ margin: 'auto' }} />}
+            {localStream ? <Monitor size={18} style={{ margin: 'auto' }} /> : <MonitorOff size={18} style={{ margin: 'auto' }} />}
           </button>
 
           <button 
