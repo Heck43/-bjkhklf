@@ -7,7 +7,7 @@ import { Compass, Plus, X } from 'lucide-react';
 // тут мы переключаемся между серверами, это так удобно! 🐾
 
 export default function ServerBar() {
-  const { servers, activeServerId, createServer, joinServer } = useStore();
+  const { servers, activeServerId, createServer, joinServer, unreadCounts } = useStore();
   const navigate = useNavigate();
 
   // стейты для красивой модалочки создания сервера~~
@@ -70,6 +70,11 @@ export default function ServerBar() {
     }
   };
 
+  // считаем все непрочитанные сообщения в личных чатах (DMs)~~
+  const dmUnreadCount = Object.entries(unreadCounts || {})
+    .filter(([key]) => key.startsWith('dm_'))
+    .reduce((sum, [_, count]) => sum + count, 0);
+
   return (
     <div className="server-bar">
       {/* главная кнопка (лс и друзья)~~ */}
@@ -81,25 +86,37 @@ export default function ServerBar() {
         <div className="server-pill" />
         <div className="server-icon" style={{ backgroundColor: activeServerId === null ? '#5865F2' : '' }}>
           👾
+          {dmUnreadCount > 0 && (
+            <div className="unread-badge">{dmUnreadCount}</div>
+          )}
         </div>
       </div>
 
       <div className="server-separator" />
 
       {/* список всех серверов~~ мррр~~ */}
-      {servers.map((server) => (
-        <div 
-          key={server.id}
-          className={`server-icon-wrapper ${activeServerId === server.id ? 'active' : ''}`}
-          onClick={() => handleServerClick(server)}
-          title={server.name}
-        >
-          <div className="server-pill" />
-          <div className="server-icon">
-            {server.icon}
+      {servers.map((server) => {
+        // считаем все непрочитанные на каналах этого сервера~~
+        const serverUnreadCount = (server.channels || [])
+          .reduce((sum, ch) => sum + (unreadCounts[ch.id] || 0), 0);
+
+        return (
+          <div 
+            key={server.id}
+            className={`server-icon-wrapper ${activeServerId === server.id ? 'active' : ''}`}
+            onClick={() => handleServerClick(server)}
+            title={server.name}
+          >
+            <div className="server-pill" />
+            <div className="server-icon">
+              {server.icon}
+              {serverUnreadCount > 0 && (
+                <div className="unread-badge">{serverUnreadCount}</div>
+              )}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
 
       <div className="server-separator" />
 

@@ -23,7 +23,8 @@ export default function Sidebar() {
     toggleDeafen,
     createChannel,
     inviteFriendToServer,
-    viewUserProfile
+    viewUserProfile,
+    unreadCounts
   } = useStore();
 
   const navigate = useNavigate();
@@ -119,25 +120,33 @@ export default function Sidebar() {
               <span>Личные сообщения</span>
             </div>
 
-            {dmFriends.map(friend => (
-              <div
-                key={friend.id}
-                className={`channel-item ${activeChannelId === `dm_${friend.id}` ? 'active' : ''}`}
-                onClick={() => handleDmUserClick(friend)}
-              >
-                <div className="avatar-container" style={{ width: 20, height: 20 }}>
-                  {friend.avatarUrl ? (
-                    <img src={friend.avatarUrl} alt={friend.username} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
-                  ) : (
-                    <div className="avatar" style={{ backgroundColor: friend.avatarColor || '#72767d', fontSize: 9 }}>
-                      {friend.username.substring(0, 2)}
-                    </div>
+            {dmFriends.map(friend => {
+              const dmKey = 'dm_' + [userProfile.username, friend.username].sort().join('_');
+              const count = unreadCounts?.[dmKey] || 0;
+
+              return (
+                <div
+                  key={friend.id}
+                  className={`channel-item ${activeChannelId === `dm_${friend.id}` ? 'active' : ''}`}
+                  onClick={() => handleDmUserClick(friend)}
+                >
+                  <div className="avatar-container" style={{ width: 20, height: 20 }}>
+                    {friend.avatarUrl ? (
+                      <img src={friend.avatarUrl} alt={friend.username} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                    ) : (
+                      <div className="avatar" style={{ backgroundColor: friend.avatarColor || '#72767d', fontSize: 9 }}>
+                        {friend.username.substring(0, 2)}
+                      </div>
+                    )}
+                    <div className={`status-dot ${friend.status}`} style={{ width: 6, height: 6, border: '1px solid var(--background-sidebar)' }} />
+                  </div>
+                  <span className="channel-name" style={{ marginLeft: 4 }}>{friend.displayName || friend.username}</span>
+                  {count > 0 && (
+                    <span className="sidebar-unread-badge">{count}</span>
                   )}
-                  <div className={`status-dot ${friend.status}`} style={{ width: 6, height: 6, border: '1px solid var(--background-sidebar)' }} />
                 </div>
-                <span className="channel-name" style={{ marginLeft: 4 }}>{friend.displayName || friend.username}</span>
-              </div>
-            ))}
+              );
+            })}
           </>
         ) : (
           <>
@@ -155,16 +164,23 @@ export default function Sidebar() {
             </div>
             {(activeServer.channels || [])
               .filter(c => c.type === 'text')
-              .map(channel => (
-                <div
-                  key={channel.id}
-                  className={`channel-item ${activeChannelId === channel.id ? 'active' : ''}`}
-                  onClick={() => handleChannelClick(channel)}
-                >
-                  <Hash size={18} />
-                  <span className="channel-name">{channel.name}</span>
-                </div>
-              ))}
+              .map(channel => {
+                const count = unreadCounts?.[channel.id] || 0;
+
+                return (
+                  <div
+                    key={channel.id}
+                    className={`channel-item ${activeChannelId === channel.id ? 'active' : ''}`}
+                    onClick={() => handleChannelClick(channel)}
+                  >
+                    <Hash size={18} />
+                    <span className="channel-name">{channel.name}</span>
+                    {count > 0 && (
+                      <span className="sidebar-unread-badge">{count}</span>
+                    )}
+                  </div>
+                );
+              })}
 
             <div className="channel-category" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
               <span>Голосовые каналы</span>

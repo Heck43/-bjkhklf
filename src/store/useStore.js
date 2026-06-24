@@ -46,6 +46,7 @@ export const useStore = create((set, get) => ({
   serverMembers: [], // реальные участники текущего сервера~~ ня!
   friends: [],
   messages: {}, // { channelId: [messages] }
+  unreadCounts: {}, // { [channelId]: count } непрочитанные сообщения, ня!
   
   // навигация~~
   activeServerId: null,
@@ -146,6 +147,14 @@ export const useStore = create((set, get) => ({
     socket.on('message', (data) => {
       const { channelId, message } = data;
       const currentUser = get().userProfile;
+      const activeCh = get().activeChannelId;
+      const dmUser = get().activeDmUser;
+
+      // определяем текущий активный ключ чата для сравнения с пришедшим сообщением~~
+      let currentActiveChatKey = activeCh;
+      if (activeCh && activeCh.startsWith('dm_') && dmUser) {
+        currentActiveChatKey = 'dm_' + [currentUser.username, dmUser.username].sort().join('_');
+      }
 
       set((state) => {
         const channelMessages = state.messages[channelId] || [];
@@ -162,6 +171,19 @@ export const useStore = create((set, get) => ({
           }
         };
       });
+
+      // увеличиваем счетчик непрочитанных, если сообщение не от нас и мы в другом чате~~
+      if (message.sender !== currentUser.username && channelId !== currentActiveChatKey) {
+        set((state) => {
+          const currentCount = state.unreadCounts[channelId] || 0;
+          return {
+            unreadCounts: {
+              ...state.unreadCounts,
+              [channelId]: currentCount + 1
+            }
+          };
+        });
+      }
 
       // показываем уведомление в браузере при свернутой вкладке~~
       if (message.sender !== currentUser.username) {
@@ -335,6 +357,21 @@ export const useStore = create((set, get) => ({
   setNavigation: (serverId, channelId, dmUser = null) => {
     set({ activeServerId: serverId, activeChannelId: channelId, activeDmUser: dmUser });
     
+    // сбрасываем непрочитанные сообщения для открываемого канала~~
+    if (channelId) {
+      let activeKey = channelId;
+      if (channelId.startsWith('dm_') && dmUser) {
+        const user = get().userProfile;
+        activeKey = 'dm_' + [user.username, dmUser.username].sort().join('_');
+      }
+      set((state) => ({
+        unreadCounts: {
+          ...state.unreadCounts,
+          [activeKey]: 0
+        }
+      }));
+    }
+
     // загружаем участников сервера, если мы перешли на сервер, ня~~
     if (serverId) {
       get().fetchServerMembers(serverId);

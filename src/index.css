@@ -1647,3 +1647,43 @@ body {
   font-weight: 700;
   color: var(--text-muted);
 }
+
+/* красные баджи для непрочитанных сообщений~~ ня! */
+.unread-badge {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  background-color: var(--discord-red);
+  color: white;
+  font-size: 11px;
+  font-weight: bold;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  border: 3px solid var(--background-servers);
+  box-sizing: content-box;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+  animation: scaleIn 0.2s ease-out;
+}
+
+.sidebar-unread-badge {
+  background-color: var(--discord-red);
+  color: white;
+  font-size: 10px;
+  font-weight: bold;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  margin-left: auto;
+  box-sizing: border-box;
+  animation: scaleIn 0.2s ease-out;
+}
