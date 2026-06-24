@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Routes, Route, Navigate, useParams, useNavigate } from 'react-router-dom';
 import { useStore } from './store/useStore';
 import { io } from 'socket.io-client';
@@ -16,7 +16,7 @@ import Auth from './pages/Auth';
 // тут собираются все панельки вместе, настраивается роутинг и синхронизация с URL! 🐾
 
 // маленький внутренний компонент для списка участников сервера справа~~
-function MemberBar() {
+function MemberBar({ style }) {
   const { serverMembers, userProfile, viewUserProfile } = useStore();
   const others = serverMembers.filter(m => m.username.toLowerCase() !== userProfile.username.toLowerCase());
   const onlineMembers = others.filter(m => m.status !== 'offline');
@@ -63,7 +63,7 @@ function MemberBar() {
   };
 
   return (
-    <div className="members-sidebar">
+    <div className="members-sidebar" style={style}>
       {/* группа "В сети"~~ */}
       <div className="member-group">
         <span className="member-group-title">В сети — {onlineMembers.length + 1}</span>
@@ -147,6 +147,63 @@ function MainLayout() {
   const { setNavigation, friends, servers, isAuthenticated, fetchInitialData, activeCall } = useStore();
   const navigate = useNavigate();
 
+  // стейты и рефы для изменения ширины колонок~~ ня! 🐾
+  const [sidebarWidth, setSidebarWidth] = useState(240);
+  const [membersWidth, setMembersWidth] = useState(240);
+
+  const sidebarWidthRef = useRef(sidebarWidth);
+  const membersWidthRef = useRef(membersWidth);
+
+  useEffect(() => {
+    sidebarWidthRef.current = sidebarWidth;
+  }, [sidebarWidth]);
+
+  useEffect(() => {
+    membersWidthRef.current = membersWidth;
+  }, [membersWidth]);
+
+  const startSidebarResize = (e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = sidebarWidthRef.current;
+
+    const doResize = (moveEvent) => {
+      const deltaX = moveEvent.clientX - startX;
+      // Ограничиваем ширину сайдбара от 200px до 400px~~
+      const newWidth = Math.max(200, Math.min(400, startWidth + deltaX));
+      setSidebarWidth(newWidth);
+    };
+
+    const stopResize = () => {
+      document.removeEventListener('mousemove', doResize);
+      document.removeEventListener('mouseup', stopResize);
+    };
+
+    document.addEventListener('mousemove', doResize);
+    document.addEventListener('mouseup', stopResize);
+  };
+
+  const startMembersResize = (e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = membersWidthRef.current;
+
+    const doResize = (moveEvent) => {
+      const deltaX = moveEvent.clientX - startX;
+      // Ограничиваем ширину участников от 200px до 350px~~
+      const newWidth = Math.max(200, Math.min(350, startWidth - deltaX));
+      setMembersWidth(newWidth);
+    };
+
+    const stopResize = () => {
+      document.removeEventListener('mousemove', doResize);
+      document.removeEventListener('mouseup', stopResize);
+    };
+
+    document.addEventListener('mousemove', doResize);
+    document.addEventListener('mouseup', stopResize);
+  };
+
   useEffect(() => {
     if (!isAuthenticated) {
       navigate('/auth', { replace: true });
@@ -207,7 +264,10 @@ function MainLayout() {
       <ServerBar />
 
       {/* 2. Вторая панель с каналами / контактами */}
-      <Sidebar />
+      <Sidebar style={{ width: sidebarWidth }} />
+
+      {/* разделитель для изменения размера сайдбара~~ */}
+      <div className="layout-resizer sidebar-resizer" onMouseDown={startSidebarResize} />
 
       {/* 3. Центральная часть в зависимости от пути */}
       {isFriends && <FriendsList />}
@@ -219,8 +279,10 @@ function MainLayout() {
         ) : (
           <>
             <ChatArea />
+            {/* разделитель для изменения размера списка участников~~ */}
+            <div className="layout-resizer members-resizer" onMouseDown={startMembersResize} />
             {/* 4. Правая панель участников (только на текстовых серверах) */}
-            <MemberBar />
+            <MemberBar style={{ width: membersWidth }} />
           </>
         )
       )}

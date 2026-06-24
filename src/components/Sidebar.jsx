@@ -8,7 +8,7 @@ import ServerSettingsModal from './ServerSettingsModal';
 // тут живут каналы и личные переписки...
 // а в самом низу профиль нашего хозяина~~ мяу! 🐾
 
-export default function Sidebar() {
+export default function Sidebar({ style }) {
   const {
     activeServerId,
     activeChannelId,
@@ -94,7 +94,7 @@ export default function Sidebar() {
   };
 
   return (
-    <div className="sidebar">
+    <div className="sidebar" style={style}>
       {/* верхний заголовок боковой панели~~ */}
       <div className="sidebar-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>{activeServer ? activeServer.name : 'Главная'}</span>
