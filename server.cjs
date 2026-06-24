@@ -7,8 +7,8 @@ const fs = require('fs');
 const { Pool } = require('pg');
 
 // привеееет, это наш гибридный бэкенд на экспрессе для рейлвея~~
-// он автоматически определяет наличие PostgreSQL через DATABASE_URL
-// и подключается к ней, а если мы на локалке — берет файловый JSON! ууу~~ мяу! 🐾
+// мы перенесли серверы и каналы в бд, а также убрали все тестовые примеры чатов
+// теперь пользователи могут общаться друг с другом, добавляясь в друзья! мяу! 🐾
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -26,7 +26,7 @@ if (isPostgres) {
   pgPool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: {
-      rejectUnauthorized: false // Важно для подключения к бд на Railway!
+      rejectUnauthorized: false
     }
   });
   console.log('подключаем бд postgresql на railway, ууу~~ 🐘');
@@ -37,14 +37,14 @@ if (isPostgres) {
 // Чтение/запись JSON базы данных~~
 function readDb() {
   if (!fs.existsSync(DB_FILE)) {
-    const defaultDb = { users: [], messages: [], friends: [] };
+    const defaultDb = { users: [], messages: [], friends: [], servers: [], channels: [] };
     fs.writeFileSync(DB_FILE, JSON.stringify(defaultDb, null, 2), 'utf8');
     return defaultDb;
   }
   try {
     return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
   } catch (e) {
-    return { users: [], messages: [], friends: [] };
+    return { users: [], messages: [], friends: [], servers: [], channels: [] };
   }
 }
 
@@ -62,6 +62,7 @@ const db = {
     if (isPostgres) {
       const client = await pgPool.connect();
       try {
+        // Создание таблиц~~
         await client.query(`
           CREATE TABLE IF NOT EXISTS users (
             id SERIAL PRIMARY KEY,
@@ -70,6 +71,22 @@ const db = {
             avatar_color VARCHAR(10) DEFAULT '#ff8da1',
             accent_color VARCHAR(10) DEFAULT '#ff2d55',
             custom_status VARCHAR(100) DEFAULT ''
+          )
+        `);
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS servers (
+            id VARCHAR(50) PRIMARY KEY,
+            name VARCHAR(50) NOT NULL,
+            icon VARCHAR(10) NOT NULL
+          )
+        `);
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS channels (
+            id VARCHAR(50) PRIMARY KEY,
+            server_id VARCHAR(50) NOT NULL,
+            name VARCHAR(50) NOT NULL,
+            type VARCHAR(10) NOT NULL,
+            FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE
           )
         `);
         await client.query(`
@@ -94,37 +111,83 @@ const db = {
           )
         `);
 
-        // проверяем и заполняем дефолтными сообщениями~~
-        const res = await client.query('SELECT COUNT(*) FROM messages');
-        if (parseInt(res.rows[0].count) === 0) {
-          const q = 'INSERT INTO messages (channel_id, sender, content, timestamp, avatar_color) VALUES ($1, $2, $3, $4, $5)';
-          await client.query(q, ['c1', 'meow_master', 'hello everyone! welcome to gamer fox den! ^w^', '10:15', '#5865F2']);
-          await client.query(q, ['c1', 'foxy_boi', 'hey there! ready to play some games today? 🐾', '10:16', '#3BA55D']);
-          await client.query(q, ['c1', 'nyan_cat', 'nyan nyan nyan~ is there music?', '10:20', '#FAA81A']);
-          await client.query(q, ['c2', 'foxy_boi', 'why did the programmer jump out of the window? because they wanted to inspect elements! 😂', '09:00', '#3BA55D']);
-          await client.query(q, ['c2', 'code_fox', 'classic, but also very painful... ;w;', '09:12', '#ED4245']);
-          await client.query(q, ['c5', 'code_fox', 'hey, did you see react 19 hooks? pretty cool features!', 'Yesterday at 18:30', '#ED4245']);
-          await client.query(q, ['c5', 'meow_master', 'yes! the useActionState hook is so clean and simple to use.', 'Yesterday at 19:02', '#5865F2']);
-          console.log('таблицы бд postgresql успешно заполнены дефолтными сообщениями!');
+        // Заполняем дефолтные серверы и каналы, если они пустые~~
+        const sCount = await client.query('SELECT COUNT(*) FROM servers');
+        if (parseInt(sCount.rows[0].count) === 0) {
+          await client.query("INSERT INTO servers (id, name, icon) VALUES ('s1', 'Gamer Fox Den', '🦊')");
+          await client.query("INSERT INTO servers (id, name, icon) VALUES ('s2', 'Coding Cafe', '☕')");
+          await client.query("INSERT INTO servers (id, name, icon) VALUES ('s3', 'Chill Lounge', '🌸')");
+
+          const cQ = "INSERT INTO channels (id, server_id, name, type) VALUES ($1, $2, $3, $4)";
+          await client.query(cQ, ['c1', 's1', 'general', 'text']);
+          await client.query(cQ, ['c2', 's1', 'memes', 'text']);
+          await client.query(cQ, ['c3', 's1', 'lounge', 'voice']);
+          await client.query(cQ, ['c4', 's1', 'gaming-1', 'voice']);
+          await client.query(cQ, ['c5', 's2', 'react-chat', 'text']);
+          await client.query(cQ, ['c6', 's2', 'bugs-and-fixes', 'text']);
+          await client.query(cQ, ['c7', 's2', 'voice-room', 'voice']);
+          await client.query(cQ, ['c8', 's3', 'welcome', 'text']);
+          await client.query(cQ, ['c9', 's3', 'music-box', 'voice']);
+          console.log('серверы и каналы успешно занесены в postgresql!');
         }
       } finally {
         client.release();
       }
     } else {
       const dbData = readDb();
-      if (dbData.messages.length === 0) {
-        dbData.messages = [
-          { id: 1, channel_id: 'c1', sender: 'meow_master', content: 'hello everyone! welcome to gamer fox den! ^w^', timestamp: '10:15', avatarColor: '#5865F2' },
-          { id: 2, channel_id: 'c1', sender: 'foxy_boi', content: 'hey there! ready to play some games today? 🐾', timestamp: '10:16', avatarColor: '#3BA55D' },
-          { id: 3, channel_id: 'c1', sender: 'nyan_cat', content: 'nyan nyan nyan~ is there music?', timestamp: '10:20', avatarColor: '#FAA81A' },
-          { id: 4, channel_id: 'c2', sender: 'foxy_boi', content: 'why did the programmer jump out of the window? because they wanted to inspect elements! 😂', timestamp: '09:00', avatarColor: '#3BA55D' },
-          { id: 5, channel_id: 'c2', sender: 'code_fox', content: 'classic, but also very painful... ;w;', timestamp: '09:12', avatarColor: '#ED4245' },
-          { id: 6, channel_id: 'c5', sender: 'code_fox', content: 'hey, did you see react 19 hooks? pretty cool features!', timestamp: 'Yesterday at 18:30', avatarColor: '#ED4245' },
-          { id: 7, channel_id: 'c5', sender: 'meow_master', content: 'yes! the useActionState hook is so clean and simple to use.', timestamp: 'Yesterday at 19:02', avatarColor: '#5865F2' }
+      if (!dbData.servers || dbData.servers.length === 0) {
+        dbData.servers = [
+          { id: 's1', name: 'Gamer Fox Den', icon: '🦊' },
+          { id: 's2', name: 'Coding Cafe', icon: '☕' },
+          { id: 's3', name: 'Chill Lounge', icon: '🌸' }
         ];
-        writeDb(dbData);
-        console.log('таблицы json бд успешно заполнены дефолтными сообщениями!');
       }
+      if (!dbData.channels || dbData.channels.length === 0) {
+        dbData.channels = [
+          { id: 'c1', server_id: 's1', name: 'general', type: 'text' },
+          { id: 'c2', server_id: 's1', name: 'memes', type: 'text' },
+          { id: 'c3', server_id: 's1', name: 'lounge', type: 'voice' },
+          { id: 'c4', server_id: 's1', name: 'gaming-1', type: 'voice' },
+          { id: 'c5', server_id: 's2', name: 'react-chat', type: 'text' },
+          { id: 'c6', server_id: 's2', name: 'bugs-and-fixes', type: 'text' },
+          { id: 'c7', server_id: 's2', name: 'voice-room', type: 'voice' },
+          { id: 'c8', server_id: 's3', name: 'welcome', type: 'text' },
+          { id: 'c9', server_id: 's3', name: 'music-box', type: 'voice' }
+        ];
+      }
+      writeDb(dbData);
+      console.log('серверы и каналы успешно инициализированы в json бд!');
+    }
+  },
+
+  // Получить список серверов и каналов~~
+  getServersAndChannels: async () => {
+    if (isPostgres) {
+      const sRes = await pgPool.query('SELECT * FROM servers');
+      const cRes = await pgPool.query('SELECT * FROM channels');
+      
+      return sRes.rows.map(s => ({
+        id: s.id,
+        name: s.name,
+        icon: s.icon,
+        channels: cRes.rows.filter(c => c.server_id === s.id).map(c => ({
+          id: c.id,
+          name: c.name,
+          type: c.type
+        }))
+      }));
+    } else {
+      const dbData = readDb();
+      return dbData.servers.map(s => ({
+        id: s.id,
+        name: s.name,
+        icon: s.icon,
+        channels: (dbData.channels || []).filter(c => c.server_id === s.id).map(c => ({
+          id: c.id,
+          name: c.name,
+          type: c.type
+        }))
+      }));
     }
   },
 
@@ -259,36 +322,6 @@ const db = {
     }
   },
 
-  // Добавить начальных друзей~~
-  addInitialFriends: async (userId) => {
-    const initial = [
-      { friend_username: 'foxy_boi', custom_status: 'playing with yarn 🧶', relation: 'friend' },
-      { friend_username: 'meow_master', custom_status: 'coding react apps... meow~', relation: 'friend' },
-      { friend_username: 'code_fox', custom_status: 'do not disturb, compilation running! 💻', relation: 'friend' },
-      { friend_username: 'fluffy_tail', custom_status: 'sleeping in the woods 😴', relation: 'friend' },
-      { friend_username: 'nyan_cat', custom_status: 'flying in space 🌈', relation: 'friend' },
-      { friend_username: 'new_furry', custom_status: 'looking for friends :3', relation: 'pending_incoming' }
-    ];
-
-    if (isPostgres) {
-      const q = 'INSERT INTO friends (user_id, friend_username, status, custom_status, relation) VALUES ($1, $2, $3, $4, $5)';
-      for (const f of initial) {
-        await pgPool.query(q, [userId, f.friend_username, 'online', f.custom_status, f.relation]);
-      }
-    } else {
-      const dbData = readDb();
-      dbData.friends.push(...initial.map((f, idx) => ({
-        id: Date.now() + idx,
-        user_id: userId,
-        friend_username: f.friend_username,
-        status: 'online',
-        customStatus: f.custom_status,
-        relation: f.relation
-      })));
-      writeDb(dbData);
-    }
-  },
-
   // Добавить запрос в друзья~~
   addFriendRequest: async (userId, friendUserId, friendUsername, currentUsername) => {
     if (isPostgres) {
@@ -372,9 +405,19 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
+// --- ЭНДПОИНТЫ СЕРВЕРОВ ---
+app.get('/api/servers', authenticateToken, async (req, res) => {
+  try {
+    const list = await db.getServersAndChannels();
+    res.json(list);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- ЭНДПОИНТЫ АВТОРИЗАЦИИ ---
 
-// регистрация~~
+// регистрация~~ (начальные друзья удалены, чтобы пользователи добавлялись сами!)
 app.post('/api/auth/register', async (req, res) => {
   const { username, password, avatarColor, accentColor } = req.body;
   if (!username || !password) {
@@ -392,9 +435,6 @@ app.post('/api/auth/register', async (req, res) => {
     const accent = accentColor || '#ff2d55';
 
     const newUser = await db.addUser(username, hashedPassword, color, accent);
-    
-    // создаем начальных друзей~~
-    await db.addInitialFriends(newUser.id);
 
     const token = jwt.sign({ id: newUser.id, username }, JWT_SECRET, { expiresIn: '7d' });
     res.json({ token, user: { id: newUser.id, username, avatarColor: color, accentColor: accent, customStatus: '' } });
@@ -486,9 +526,9 @@ app.post('/api/messages', authenticateToken, async (req, res) => {
     const newMsg = await db.addMessage(channelId, req.user.username, content, timeStr, avatarColor);
     res.json(newMsg);
 
-    // авто-ответ бота на сообщения~~
+    // авто-ответ бота на сообщения (только на серверах)~~
     const normalizedContent = content.toLowerCase();
-    if (normalizedContent.includes('привет') || normalizedContent.includes('hello') || normalizedContent.includes('femboy')) {
+    if (!channelId.startsWith('dm_') && (normalizedContent.includes('привет') || normalizedContent.includes('hello') || normalizedContent.includes('femboy'))) {
       setTimeout(async () => {
         try {
           const botTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -528,7 +568,7 @@ app.post('/api/friends/add', authenticateToken, async (req, res) => {
     const targetUser = await db.getUserByUsername(username);
     if (!targetUser) return res.status(404).json({ error: 'пользователь не найден!' });
 
-    const alreadyFriend = await db.hasFriendRow(req.user.id, username);
+    const alreadyFriend = await db.hasFriendRow(req.user.id, targetUser.username);
     if (alreadyFriend) return res.status(400).json({ error: 'вы уже отправляли запрос или дружите!' });
 
     await db.addFriendRequest(req.user.id, targetUser.id, targetUser.username, req.user.username);

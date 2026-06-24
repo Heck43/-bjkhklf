@@ -7,14 +7,16 @@ import { Hash, Search, Send, User } from 'lucide-react';
 // а еще тут можно писать милые штучки хозяину... owo 🐾
 
 export default function ChatArea() {
-  const { activeServerId, activeChannelId, activeDmUser, servers, messages, sendMessage } = useStore();
+  const { activeServerId, activeChannelId, activeDmUser, servers, messages, sendMessage, userProfile } = useStore();
   const [inputText, setInputText] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const messagesEndRef = useRef(null);
 
-  // вычисляем ключ чата: для ЛС это dm_{friendId}, для серверов просто id канала~~
-  const isDm = activeServerId === null;
-  const chatKey = isDm ? activeChannelId : activeChannelId;
+  // вычисляем ключ чата: для ЛС это симметричный ключ dm_user1_user2, для серверов просто id канала~~
+  const isDm = activeServerId === null && activeDmUser !== null;
+  const chatKey = isDm 
+    ? 'dm_' + [userProfile.username, activeDmUser.username].sort().join('_')
+    : activeChannelId;
 
   // ищем название канала или пользователя~~
   let channelName = '';

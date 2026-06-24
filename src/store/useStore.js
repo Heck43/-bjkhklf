@@ -3,38 +3,6 @@ import { create } from 'zustand';
 // привеееет, это наш стор на Zustand, подключенный к реальной БД sqlite3!
 // теперь все данные сохраняются на сервере и доступны в сети на Railway.com~~ мяу! 🐾
 
-const INITIAL_SERVERS = [
-  {
-    id: 's1',
-    name: 'Gamer Fox Den',
-    icon: '🦊',
-    channels: [
-      { id: 'c1', name: 'general', type: 'text' },
-      { id: 'c2', name: 'memes', type: 'text' },
-      { id: 'c3', name: 'lounge', type: 'voice' },
-      { id: 'c4', name: 'gaming-1', type: 'voice' }
-    ]
-  },
-  {
-    id: 's2',
-    name: 'Coding Cafe',
-    icon: '☕',
-    channels: [
-      { id: 'c5', name: 'react-chat', type: 'text' },
-      { id: 'c6', name: 'bugs-and-fixes', type: 'text' },
-      { id: 'c7', name: 'voice-room', type: 'voice' }
-    ]
-  },
-  {
-    id: 's3',
-    name: 'Chill Lounge',
-    icon: '🌸',
-    channels: [
-      { id: 'c8', name: 'welcome', type: 'text' },
-      { id: 'c9', name: 'music-box', type: 'voice' }
-    ]
-  }
-];
 
 // хелпер для авторизованных запросов к API бэкенда~~
 const apiFetch = async (endpoint, options = {}) => {
@@ -70,7 +38,7 @@ export const useStore = create((set, get) => ({
     id: null
   },
 
-  servers: INITIAL_SERVERS, // серверы остаются захардкоженными для структуры, каналы из бд
+  servers: [],
   friends: [],
   messages: {}, // { channelId: [messages] }
   
@@ -151,20 +119,34 @@ export const useStore = create((set, get) => ({
       const profile = await apiFetch('/api/auth/me');
       set({ userProfile: profile });
 
-      // 2. загружаем список друзей из базы~~
+      // 2. загружаем список серверов и друзей из базы~~
+      await get().fetchServers();
       await get().fetchFriends();
 
       // 3. загружаем сообщения для активного канала, если он текстовый~~
       const activeCh = get().activeChannelId;
-      if (activeCh && activeCh !== 'friends' && !activeCh.startsWith('dm_')) {
-        await get().fetchMessages(activeCh);
-      } else if (activeCh && activeCh.startsWith('dm_')) {
-        await get().fetchMessages(activeCh);
+      if (activeCh && activeCh !== 'friends') {
+        if (activeCh.startsWith('dm_') && get().activeDmUser) {
+          const user = get().userProfile;
+          const dmKey = 'dm_' + [user.username, get().activeDmUser.username].sort().join('_');
+          await get().fetchMessages(dmKey);
+        } else {
+          await get().fetchMessages(activeCh);
+        }
       }
     } catch (e) {
       console.error('ошибка загрузки начальных данных:', e);
       // если токен протух, вылогиниваемся~~
       get().logout();
+    }
+  },
+
+  fetchServers: async () => {
+    try {
+      const data = await apiFetch('/api/servers');
+      set({ servers: data });
+    } catch (e) {
+      console.error('ошибка загрузки серверов:', e);
     }
   },
 
@@ -206,13 +188,17 @@ export const useStore = create((set, get) => ({
     }
   },
 
-  // --- ЭКШЕНЫ НАВИГАЦИИ ---
-
   setNavigation: (serverId, channelId, dmUser = null) => {
     set({ activeServerId: serverId, activeChannelId: channelId, activeDmUser: dmUser });
     // при переходе в канал загружаем его историю сообщений из бд~~
     if (channelId && channelId !== 'friends') {
-      get().fetchMessages(channelId);
+      if (channelId.startsWith('dm_') && dmUser) {
+        const user = get().userProfile;
+        const dmKey = 'dm_' + [user.username, dmUser.username].sort().join('_');
+        get().fetchMessages(dmKey);
+      } else {
+        get().fetchMessages(channelId);
+      }
     }
   },
 
@@ -260,44 +246,16 @@ export const useStore = create((set, get) => ({
         };
       });
 
-      // 2. имитируем ответ бота, сохраняя его в настоящую бд, ня!
+      // 2. имитируем ответ бота, перечитывая сообщения из бд, ня!
       const normalizedContent = content.toLowerCase();
-      if (normalizedContent.includes('привет') || normalizedContent.includes('hello') || normalizedContent.includes('femboy')) {
+      if (!isDm && (normalizedContent.includes('привет') || normalizedContent.includes('hello') || normalizedContent.includes('femboy'))) {
         setTimeout(async () => {
-          const botUsername = isDm ? get().activeDmUser?.username || 'bot_friend' : 'foxy_boi';
-          const botReplyContent = 'привееет! мяууу~~ как твои дела? *виляет хвостиком* :3';
-          
           try {
-            // отправляем сообщение бота через специальный бэк-энд запрос (или просто имитируем от имени бота)~~
-            // для этого бэкенд разрешает отправлять сообщения от любого имени (наш учебный стенд!)
-            const botMsg = await apiFetch('/api/messages', {
-              method: 'POST',
-              body: JSON.stringify({
-                channelId,
-                content: botReplyContent,
-                avatarColor: '#3BA55D'
-              }),
-              headers: {
-                // передаем специальный заголовок для авторизации бота, либо бэкенд просто берет отправителя из токена,
-                // поэтому для имитации бота на бэкенде мы сделали его открытым или добавим имя отправителя,
-                // но погоди! на бэкенде sender берется из токена (req.user.username).
-                // чтобы бот ответил со своим именем, мы можем просто разрешить бэкенду принимать sender из тела,
-                // либо послать запрос, но если бэкенд берет из токена, то отправитель будет юзером.
-                // ооо! давай сделаем в server.js поддержку отправки от бота, или пошлем в локальный стейт,
-                // но лучше сохранять бота в БД! давай проверим в server.js: там в POST /api/messages отправителем пишется req.user.username.
-                // чтобы бот мог писать в бд, давай добавим бот-ответ прямо в бэкенд! это еще гениальнее!
-                // пусть бэкенд сам видит, если сообщение содержит 'привет', и автоматически добавляет ответ бота в бд!
-                // тогда бэкенд сам сохранит бота, а фронтенд просто перечитает сообщения через 1.5 сек!
-                // это невероятно круто и правильно!
-              }
-            });
-            
-            // но мы можем также просто получить сообщения заново через 1.5 секунды, ня~~
             await get().fetchMessages(channelId);
           } catch (e) {
-            console.error('ошибка отправки бота:', e);
+            console.error('ошибка загрузки авто-ответа бота:', e);
           }
-        }, 1500);
+        }, 1600);
       }
     } catch (e) {
       console.error('ошибка отправки сообщения:', e);
