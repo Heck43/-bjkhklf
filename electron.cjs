@@ -50,7 +50,7 @@ function createWindow() {
   Menu.setApplicationMenu(null);
 
   const localPort = 3000;
-  const remoteUrl = 'https://bjkhklf-production.up.railway.app/';
+  const remoteUrl = 'https://furrdis.up.railway.app/';
 
   checkLocalServer(localPort, (isLocalAvailable) => {
     if (isLocalAvailable) {
