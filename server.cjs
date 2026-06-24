@@ -88,6 +88,9 @@ const db = {
           ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT DEFAULT ''
         `);
         await client.query(`
+          ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name VARCHAR(50) DEFAULT ''
+        `);
+        await client.query(`
           CREATE TABLE IF NOT EXISTS servers (
             id VARCHAR(50) PRIMARY KEY,
             name VARCHAR(50) NOT NULL,
@@ -214,12 +217,12 @@ const db = {
       const res = await pgPool.query('SELECT * FROM users WHERE LOWER(username) = LOWER($1)', [username]);
       if (res.rows.length === 0) return null;
       const u = res.rows[0];
-      return { id: u.id, username: u.username, password: u.password, avatarColor: u.avatar_color, accentColor: u.accent_color, customStatus: u.custom_status, avatarUrl: u.avatar_url || '' };
+      return { id: u.id, username: u.username, displayName: u.display_name || u.username, password: u.password, avatarColor: u.avatar_color, accentColor: u.accent_color, customStatus: u.custom_status, avatarUrl: u.avatar_url || '' };
     } else {
       const dbData = readDb();
       const u = dbData.users.find(u => u.username.toLowerCase() === username.toLowerCase());
       if (!u) return null;
-      return { ...u, avatarUrl: u.avatarUrl || '' };
+      return { ...u, displayName: u.displayName || u.username, avatarUrl: u.avatarUrl || '' };
     }
   },
 
@@ -228,12 +231,12 @@ const db = {
       const res = await pgPool.query('SELECT * FROM users WHERE id = $1', [id]);
       if (res.rows.length === 0) return null;
       const u = res.rows[0];
-      return { id: u.id, username: u.username, password: u.password, avatarColor: u.avatar_color, accentColor: u.accent_color, customStatus: u.custom_status, avatarUrl: u.avatar_url || '' };
+      return { id: u.id, username: u.username, displayName: u.display_name || u.username, password: u.password, avatarColor: u.avatar_color, accentColor: u.accent_color, customStatus: u.custom_status, avatarUrl: u.avatar_url || '' };
     } else {
       const dbData = readDb();
       const u = dbData.users.find(u => u.id === id);
       if (!u) return null;
-      return { ...u, avatarUrl: u.avatarUrl || '' };
+      return { ...u, displayName: u.displayName || u.username, avatarUrl: u.avatarUrl || '' };
     }
   },
 
@@ -241,14 +244,14 @@ const db = {
   addUser: async (username, password, avatarColor, accentColor) => {
     if (isPostgres) {
       const res = await pgPool.query(
-        'INSERT INTO users (username, password, avatar_color, accent_color) VALUES ($1, $2, $3, $4) RETURNING *',
+        'INSERT INTO users (username, password, avatar_color, accent_color, display_name) VALUES ($1, $2, $3, $4, $1) RETURNING *',
         [username, password, avatarColor, accentColor]
       );
       const u = res.rows[0];
-      return { id: u.id, username: u.username, password: u.password, avatarColor: u.avatar_color, accentColor: u.accent_color, customStatus: u.custom_status, avatarUrl: '' };
+      return { id: u.id, username: u.username, displayName: u.display_name || u.username, password: u.password, avatarColor: u.avatar_color, accentColor: u.accent_color, customStatus: u.custom_status, avatarUrl: '' };
     } else {
       const dbData = readDb();
-      const newUser = { id: dbData.users.length + 1, username, password, avatarColor, accentColor, customStatus: '', avatarUrl: '' };
+      const newUser = { id: dbData.users.length + 1, username, displayName: username, password, avatarColor, accentColor, customStatus: '', avatarUrl: '' };
       dbData.users.push(newUser);
       writeDb(dbData);
       return newUser;
@@ -256,27 +259,23 @@ const db = {
   },
 
   // Обновить профиль~~
-  updateUserProfile: async (id, username, customStatus, avatarColor, accentColor, avatarUrl = '') => {
+  updateUserProfile: async (id, displayName, customStatus, avatarColor, accentColor, avatarUrl = '') => {
     if (isPostgres) {
       await pgPool.query(
-        'UPDATE users SET username = $1, custom_status = $2, avatar_color = $3, accent_color = $4, avatar_url = $5 WHERE id = $6',
-        [username, customStatus, avatarColor, accentColor, avatarUrl, id]
+        'UPDATE users SET display_name = $1, custom_status = $2, avatar_color = $3, accent_color = $4, avatar_url = $5 WHERE id = $6',
+        [displayName, customStatus, avatarColor, accentColor, avatarUrl, id]
       );
-      return { id, username, customStatus, avatarColor, accentColor, avatarUrl };
+      const uRes = await pgPool.query('SELECT * FROM users WHERE id = $1', [id]);
+      const u = uRes.rows[0];
+      return { id, username: u.username, displayName: u.display_name || u.username, customStatus, avatarColor, accentColor, avatarUrl };
     } else {
       const dbData = readDb();
       const userIndex = dbData.users.findIndex(u => u.id === id);
       if (userIndex === -1) return null;
 
-      const oldUsername = dbData.users[userIndex].username;
-      dbData.users[userIndex] = { ...dbData.users[userIndex], username, customStatus, avatarColor, accentColor, avatarUrl };
-
-      if (oldUsername !== username) {
-        dbData.friends = dbData.friends.map(f => f.friend_username === oldUsername ? { ...f, friend_username: username } : f);
-        dbData.messages = dbData.messages.map(m => m.sender === oldUsername ? { ...m, sender: username } : m);
-      }
+      dbData.users[userIndex] = { ...dbData.users[userIndex], displayName, customStatus, avatarColor, accentColor, avatarUrl };
       writeDb(dbData);
-      return { id, username, customStatus, avatarColor, accentColor, avatarUrl };
+      return { id, username: dbData.users[userIndex].username, displayName, customStatus, avatarColor, accentColor, avatarUrl };
     }
   },
 
@@ -347,7 +346,7 @@ const db = {
   getFriends: async (userId) => {
     if (isPostgres) {
       const res = await pgPool.query(`
-        SELECT f.friend_username, f.status, f.custom_status, f.relation, u.avatar_color, u.avatar_url
+        SELECT f.friend_username, f.status, f.custom_status, f.relation, u.avatar_color, u.avatar_url, u.display_name
         FROM friends f
         LEFT JOIN users u ON LOWER(u.username) = LOWER(f.friend_username)
         WHERE f.user_id = $1
@@ -358,7 +357,8 @@ const db = {
         customStatus: r.custom_status, 
         relation: r.relation,
         avatarColor: r.avatar_color,
-        avatarUrl: r.avatar_url || ''
+        avatarUrl: r.avatar_url || '',
+        displayName: r.display_name || r.friend_username
       }));
     } else {
       const dbData = readDb();
@@ -370,7 +370,8 @@ const db = {
           customStatus: r.customStatus, 
           relation: r.relation,
           avatarColor: u ? u.avatarColor : '#72767d',
-          avatarUrl: u ? (u.avatarUrl || '') : ''
+          avatarUrl: u ? (u.avatarUrl || '') : '',
+          displayName: u ? (u.displayName || u.username) : r.friend_username
         };
       });
     }
@@ -422,6 +423,17 @@ const db = {
       let dbData = readDb();
       dbData.friends = dbData.friends.filter(f => !(f.user_id === userId && f.friend_username === friendUsername));
       dbData.friends = dbData.friends.filter(f => !(f.user_id === friendUserId && f.friend_username === currentUsername));
+      writeDb(dbData);
+    }
+  },
+
+  // Очистить сообщения в чате ЛС~~
+  clearDmMessages: async (channelId) => {
+    if (isPostgres) {
+      await pgPool.query('DELETE FROM messages WHERE channel_id = $1', [channelId]);
+    } else {
+      const dbData = readDb();
+      dbData.messages = dbData.messages.filter(m => m.channel_id !== channelId);
       writeDb(dbData);
     }
   },
@@ -755,21 +767,34 @@ app.post('/api/messages', authenticateToken, async (req, res) => {
     const senderUser = await db.getUserByUsername(req.user.username);
     const resolvedAvatarColor = senderUser ? senderUser.avatarColor : (avatarColor || '#ff8da1');
     const resolvedAvatarUrl = senderUser ? (senderUser.avatarUrl || '') : '';
+    const resolvedDisplayName = senderUser ? (senderUser.displayName || senderUser.username) : req.user.username;
 
     const newMsg = await db.addMessage(channelId, req.user.username, content, timeStr, resolvedAvatarColor);
     
     const enrichedMsg = {
       ...newMsg,
       avatarColor: resolvedAvatarColor,
-      avatarUrl: resolvedAvatarUrl
+      avatarUrl: resolvedAvatarUrl,
+      displayName: resolvedDisplayName
     };
     
-    // мгновенно оповещаем участников по SSE~~
+    // мгновенно оповещаем участников по сокетам~~
     if (channelId.startsWith('dm_')) {
-      const parts = channelId.replace('dm_', '').split('_');
-      parts.forEach(username => {
-        sendSseToUser(username, 'message', { channelId, message: enrichedMsg });
-      });
+      const dmPart = channelId.replace('dm_', '');
+      let recipient = '';
+      const senderLower = req.user.username.toLowerCase();
+      const dmPartLower = dmPart.toLowerCase();
+      
+      if (dmPartLower.startsWith(senderLower + '_')) {
+        recipient = dmPart.substring(senderLower.length + 1);
+      } else if (dmPartLower.endsWith('_' + senderLower)) {
+        recipient = dmPart.substring(0, dmPart.length - (senderLower.length + 1));
+      }
+
+      sendSseToUser(req.user.username, 'message', { channelId, message: enrichedMsg });
+      if (recipient) {
+        sendSseToUser(recipient, 'message', { channelId, message: enrichedMsg });
+      }
     } else {
       sendSseToAll('message', { channelId, message: enrichedMsg });
     }
@@ -845,6 +870,10 @@ app.post('/api/friends/remove', authenticateToken, async (req, res) => {
     if (friendUser) {
       await db.removeFriend(req.user.id, friendUsername, friendUser.id, req.user.username);
       
+      // Очищаем чат с другом на сервере при удалении~~
+      const dmKey = 'dm_' + [req.user.username, friendUsername].sort().join('_');
+      await db.clearDmMessages(dmKey);
+
       // шлем обоим событие обновления списка друзей~~
       sendSseToUser(friendUsername, 'friend', { type: 'remove', from: req.user.username });
       sendSseToUser(req.user.username, 'friend', { type: 'update' });

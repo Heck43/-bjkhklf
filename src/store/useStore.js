@@ -296,6 +296,7 @@ export const useStore = create((set, get) => ({
           [channelId]: rows.map(r => ({
             id: r.id,
             sender: r.sender,
+            displayName: r.displayName || r.sender,
             content: r.content,
             timestamp: r.timestamp,
             avatarColor: r.avatarColor,

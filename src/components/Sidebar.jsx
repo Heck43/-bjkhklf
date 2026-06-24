@@ -112,7 +112,7 @@ export default function Sidebar() {
                   )}
                   <div className={`status-dot ${friend.status}`} style={{ width: 6, height: 6, border: '1px solid var(--background-sidebar)' }} />
                 </div>
-                <span className="channel-name" style={{ marginLeft: 4 }}>{friend.username}</span>
+                <span className="channel-name" style={{ marginLeft: 4 }}>{friend.displayName || friend.username}</span>
               </div>
             ))}
           </>
@@ -184,7 +184,7 @@ export default function Sidebar() {
             <div className="status-dot online" />
           </div>
           <div className="user-meta">
-            <span className="username">{userProfile.username}</span>
+            <span className="username">{userProfile.displayName || userProfile.username}</span>
             <span className="custom-status">{userProfile.customStatus}</span>
           </div>
         </div>

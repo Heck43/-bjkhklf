@@ -89,7 +89,12 @@ export default function UserProfileModal() {
           </div>
 
           <div className="profile-card-info">
-            <span className="profile-card-username">@{selectedProfileUser.username}</span>
+            <span className="profile-card-username">
+              {selectedProfileUser.displayName || selectedProfileUser.username}
+            </span>
+            <span style={{ fontSize: 13, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
+              @{selectedProfileUser.username}
+            </span>
             <span className="profile-card-status">
               {selectedProfileUser.customStatus || 'Статус не указан...'}
             </span>

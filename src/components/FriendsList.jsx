@@ -143,7 +143,7 @@ export default function FriendsList() {
                         <div className={`status-dot ${friend.status}`} style={{ width: 10, height: 10, border: '2px solid var(--background-chat)' }} />
                       </div>
                       <div className="friend-names">
-                        <span className="friend-username">{friend.username}</span>
+                        <span className="friend-username">{friend.displayName || friend.username}</span>
                         <span className="friend-substatus">
                           {friend.relation === 'pending_incoming' && 'Входящий запрос в друзья'}
                           {friend.relation === 'pending_outgoing' && 'Исходящий запрос в друзья'}

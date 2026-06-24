@@ -23,8 +23,8 @@ export default function ChatArea() {
   let channelDesc = '';
   
   if (isDm) {
-    channelName = activeDmUser ? activeDmUser.username : 'Чат';
-    channelDesc = activeDmUser ? `Личный чат с ${activeDmUser.username} (${activeDmUser.customStatus || activeDmUser.status})` : '';
+    channelName = activeDmUser ? (activeDmUser.displayName || activeDmUser.username) : 'Чат';
+    channelDesc = activeDmUser ? `Личный чат с ${activeDmUser.displayName || activeDmUser.username} (${activeDmUser.customStatus || activeDmUser.status})` : '';
   } else {
     const server = servers.find(s => s.id === activeServerId);
     const channel = server?.channels.find(c => c.id === activeChannelId);
@@ -159,7 +159,7 @@ export default function ChatArea() {
               </div>
               <div className="message-content-wrapper">
                 <div className="message-sender-meta">
-                  <span className="message-sender" style={{ cursor: 'pointer' }} onClick={() => viewUserProfile(msg.sender)}>{msg.sender}</span>
+                  <span className="message-sender" style={{ cursor: 'pointer' }} onClick={() => viewUserProfile(msg.sender)}>{msg.displayName || msg.sender}</span>
                   <span className="message-time">{msg.timestamp}</span>
                 </div>
                 {renderMessageContent(msg.content)}

@@ -11,10 +11,9 @@ import { X, Check } from 'lucide-react';
 
 // схема валидации с помощью Zod~~
 const profileSchema = z.object({
-  username: z.string()
-    .min(3, 'имя должно быть не меньше 3 букв~~')
-    .max(15, 'имя не должно превышать 15 букв~~')
-    .regex(/^[a-zA-Z0-9_]+$/, 'используй только английские буквы, цифры и _ , ня!'),
+  displayName: z.string()
+    .min(2, 'имя должно быть не меньше 2 букв~~')
+    .max(20, 'имя не должно превышать 20 букв~~'),
   customStatus: z.string()
     .max(50, 'статус слишком длинный, максимум 50 символов~~')
     .optional()
@@ -39,7 +38,7 @@ export default function UserSettings() {
   } = useForm({
     resolver: zodResolver(profileSchema),
     defaultValues: {
-      username: userProfile.username,
+      displayName: userProfile.displayName || userProfile.username,
       customStatus: userProfile.customStatus || '',
       avatarColor: userProfile.avatarColor,
       accentColor: userProfile.accentColor,
@@ -50,6 +49,7 @@ export default function UserSettings() {
   const selectedAvatarColor = watch('avatarColor');
   const selectedAccentColor = watch('accentColor');
   const avatarUrlValue = watch('avatarUrl');
+  const displayNameValue = watch('displayName');
 
   const handleAvatarFileChange = (e) => {
     const file = e.target.files?.[0];
@@ -89,17 +89,29 @@ export default function UserSettings() {
         <form onSubmit={handleSubmit(onSubmit)}>
           <div className="settings-body">
             
-            {/* имя пользователя~~ */}
+            {/* имя пользователя (уникальный ник)~~ */}
             <div className="form-group">
-              <label className="form-label">Имя пользователя (Только английские буквы/цифры/_)</label>
+              <label className="form-label">Уникальный никнейм (нельзя изменить)</label>
               <input
                 type="text"
                 className="form-input"
-                placeholder="Имя пользователя..."
-                {...register('username')}
+                value={userProfile.username}
+                disabled
+                style={{ opacity: 0.6, cursor: 'not-allowed' }}
               />
-              {errors.username && (
-                <span className="error-message">{errors.username.message}</span>
+            </div>
+
+            {/* отображаемое имя (имя)~~ */}
+            <div className="form-group">
+              <label className="form-label">Отображаемое имя (Имя)</label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="Ваше имя..."
+                {...register('displayName')}
+              />
+              {errors.displayName && (
+                <span className="error-message">{errors.displayName.message}</span>
               )}
             </div>
 
@@ -201,13 +213,13 @@ export default function UserSettings() {
                     />
                   ) : (
                     <div className="avatar" style={{ backgroundColor: selectedAvatarColor, fontSize: 16 }}>
-                      {watch('username')?.substring(0, 2) || '??'}
+                      {(displayNameValue || userProfile.username)?.substring(0, 2) || '??'}
                     </div>
                   )}
                   <div className="status-dot online" style={{ width: 12, height: 12, border: '2.5px solid var(--background-profile)' }} />
                 </div>
                 <div className="user-meta">
-                  <span className="username" style={{ fontSize: 15 }}>{watch('username')}</span>
+                  <span className="username" style={{ fontSize: 15 }}>{displayNameValue || userProfile.username}</span>
                   <span className="custom-status" style={{ fontSize: 12 }}>{watch('customStatus') || 'Нет статуса...'}</span>
                 </div>
               </div>
