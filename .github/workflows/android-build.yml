@@ -1,0 +1,82 @@
+name: 🤖 Android APK Build (furrdis)
+
+# запускаем сборку при каждом пуше в main или вручную~~
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'тип сборки'
+        required: false
+        default: 'debug'
+        type: choice
+        options:
+          - debug
+          - release
+
+jobs:
+  build-android:
+    name: 📱 Собираем APK на GitHub серверах, ня~~
+    runs-on: ubuntu-latest
+    
+    steps:
+      # скачиваем код репозитория~~
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      # устанавливаем node.js~~
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # устанавливаем зависимости проекта~~
+      - name: 📦 Install npm dependencies
+        run: npm install --legacy-peer-deps
+
+      # собираем веб-часть приложения~~
+      - name: 🏗️ Build web assets (vite)
+        run: npm run build
+        env:
+          NODE_ENV: production
+
+      # синхронизируем с android проектом~~
+      - name: 🔄 Sync Capacitor Android
+        run: npx cap sync android
+
+      # устанавливаем java для gradle~~
+      - name: ☕ Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      # устанавливаем android sdk командной строки~~
+      - name: 🤖 Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      # делаем gradlew исполняемым~~
+      - name: 🔧 Make gradlew executable
+        run: chmod +x android/gradlew
+        working-directory: ${{ github.workspace }}
+
+      # собираем debug apk (быстро и без подписи, мяу~~)
+      - name: 🔨 Build Debug APK
+        run: ./gradlew assembleDebug --no-daemon
+        working-directory: android
+
+      # находим и загружаем готовый apk файл~~
+      - name: 📤 Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: furrdis-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14
+
+      # выводим информацию о готовом файле~~
+      - name: ✅ APK build complete!
+        run: |
+          echo "🐾 APK успешно собрана, ня~~"
+          ls -la android/app/build/outputs/apk/debug/ || echo "файл не найден, оййй~~"
