@@ -59,6 +59,7 @@ export const useStore = create((set, get) => ({
   activeCall: null,
   localStream: null,
   remoteStream: null,
+  localAudioStream: null,
   
   // админ-панель~~
   adminUsers: [],
@@ -837,13 +838,16 @@ export const useStore = create((set, get) => ({
       socket.emit('leave_voice');
     }
     // гасим наши стримы при выходе из звоночка, мяу~~ 🐾
-    const { localStream } = get();
+    const { localStream, localAudioStream } = get();
     if (localStream) {
       localStream.getTracks().forEach(track => track.stop());
     }
+    if (localAudioStream) {
+      localAudioStream.getTracks().forEach(track => track.stop());
+    }
     // звук выхода из звоночка мяууу~~
     playLeaveSound();
-    set({ activeCall: null, localStream: null, remoteStream: null });
+    set({ activeCall: null, localStream: null, remoteStream: null, localAudioStream: null });
   },
 
   toggleMute: () => {
@@ -853,6 +857,12 @@ export const useStore = create((set, get) => ({
         ...state.activeCall,
         isMuted: newMuted
       } : null;
+
+      if (state.localAudioStream) {
+        state.localAudioStream.getAudioTracks().forEach(track => {
+          track.enabled = !newMuted;
+        });
+      }
 
       if (state.socket && state.activeCall) {
         // оййй~~ получаем локального котика, чтобы не портить чужие статусы трансляции! 🐾
@@ -881,6 +891,12 @@ export const useStore = create((set, get) => ({
         isDeafened: newDeafened,
         isMuted: newMuted
       } : null;
+
+      if (state.localAudioStream) {
+        state.localAudioStream.getAudioTracks().forEach(track => {
+          track.enabled = !newMuted;
+        });
+      }
 
       if (state.socket && state.activeCall) {
         const localPart = state.activeCall.participants?.find(p => p.isLocal);

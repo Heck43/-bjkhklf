@@ -210,19 +210,9 @@ export default function VoiceCall() {
       {/* Центральная область участников и стрима */}
       {isSharing ? (
         /* РЕЖИМ ТРАНСЛЯЦИИ ЭКРАНА (Слева стрим, Справа колонка участников) */
-        <div style={{ display: 'flex', flex: 1, gap: 16, minHeight: 0, padding: 16 }}>
+        <div className="call-main-area">
           {/* Стрим экрана */}
-          <div style={{
-            flex: 1,
-            backgroundColor: '#000',
-            borderRadius: 12,
-            overflow: 'hidden',
-            position: 'relative',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            border: '1px solid var(--glass-border)'
-          }}>
+          <div className="call-stream-container">
             {isLocalSharing ? (
               <video 
                 ref={localVideoRef}
@@ -261,14 +251,7 @@ export default function VoiceCall() {
           </div>
 
           {/* Список участников сбоку */}
-          <div style={{
-            width: 240,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 12,
-            overflowY: 'auto',
-            paddingRight: 4
-          }}>
+          <div className="call-participants-sidebar">
             {activeCall.participants.map((p) => {
               const audioLevel = activeCall.audioLevels?.find(al => al.name === p.username)?.level || 0;
               const isSpeaking = audioLevel > 30 && !p.isMuted && !p.isDeafened;
