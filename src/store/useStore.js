@@ -407,24 +407,39 @@ export const useStore = create((set, get) => ({
     }
   },
 
-  fetchMessages: async (channelId) => {
+  fetchMessages: async (channelId, limit = 50, beforeId = null) => {
     try {
-      const rows = await apiFetch(`/api/messages/${channelId}`);
-      set((state) => ({
-        messages: {
-          ...state.messages,
-          [channelId]: rows.map(r => ({
-            id: r.id,
-            sender: r.sender,
-            displayName: r.displayName || r.sender,
-            content: r.content,
-            timestamp: r.timestamp,
-            avatarColor: r.avatarColor,
-            avatarUrl: r.avatarUrl || '',
-            isOwn: r.sender === state.userProfile.username
-          }))
+      const url = `/api/messages/${channelId}?limit=${limit}` + (beforeId ? `&before=${beforeId}` : '');
+      const rows = await apiFetch(url);
+      set((state) => {
+        const currentMsgs = state.messages[channelId] || [];
+        const newMsgs = rows.map(r => ({
+          id: r.id,
+          sender: r.sender,
+          displayName: r.displayName || r.sender,
+          content: r.content,
+          timestamp: r.timestamp,
+          avatarColor: r.avatarColor,
+          avatarUrl: r.avatarUrl || '',
+          isOwn: r.sender === state.userProfile.username
+        }));
+
+        let merged = [];
+        if (beforeId) {
+          // если грузим историю назад, прикрепляем новые старые сообщения вперед~~
+          const existingIds = new Set(currentMsgs.map(m => m.id));
+          merged = [...newMsgs.filter(m => !existingIds.has(m.id)), ...currentMsgs];
+        } else {
+          merged = newMsgs;
         }
-      }));
+
+        return {
+          messages: {
+            ...state.messages,
+            [channelId]: merged
+          }
+        };
+      });
     } catch (e) {
       console.error('ошибка загрузки сообщений:', e);
     }

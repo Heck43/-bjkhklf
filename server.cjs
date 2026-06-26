@@ -478,10 +478,10 @@ const db = {
   },
 
   // Получить сообщения~~
-  getMessages: async (channelId) => {
+  getMessages: async (channelId, limit = 50, beforeId = null) => {
     if (isPostgres) {
       // 1. Получаем сообщения с инфой об ответе~~
-      const res = await pgPool.query(`
+      let queryText = `
         SELECT m.id, m.sender, m.content, m.timestamp, u.avatar_color, u.avatar_url, u.display_name,
                m.reply_to_id,
                rm.sender AS reply_to_sender,
@@ -494,16 +494,33 @@ const db = {
         LEFT JOIN messages rm ON rm.id = m.reply_to_id
         LEFT JOIN users ru ON LOWER(ru.username) = LOWER(rm.sender)
         WHERE m.channel_id = $1
-        ORDER BY m.id ASC
-      `, [channelId]);
+      `;
+      const queryParams = [channelId];
 
-      // 2. Получаем все реакции для сообщений этого канала~~
+      if (beforeId) {
+        queryParams.push(beforeId);
+        queryText += ` AND m.id < $${queryParams.length}`;
+      }
+
+      queryParams.push(limit);
+      queryText += `
+        ORDER BY m.id DESC
+        LIMIT $${queryParams.length}
+      `;
+
+      const res = await pgPool.query(queryText, queryParams);
+      // переворачиваем обратно, чтобы сообщения шли по порядку возрастания id (от старых к новым)~~
+      res.rows.reverse();
+
+      if (res.rows.length === 0) return [];
+      const messageIds = res.rows.map(r => r.id);
+
+      // 2. Получаем все реакции для сообщений этого канала (только для полученных сообщений, чтобы не грузить лишнего!)~~
       const reactionsRes = await pgPool.query(`
         SELECT r.message_id, r.username, r.emoji
         FROM message_reactions r
-        JOIN messages m ON m.id = r.message_id
-        WHERE m.channel_id = $1
-      `, [channelId]);
+        WHERE r.message_id = ANY($1)
+      `, [messageIds]);
 
       // группируем их по message_id~~
       const reactionsMap = {};
@@ -532,7 +549,19 @@ const db = {
       }));
     } else {
       const dbData = readDb();
-      return dbData.messages.filter(m => m.channel_id === channelId).map(r => {
+      let filtered = dbData.messages.filter(m => m.channel_id === channelId);
+      if (beforeId) {
+        filtered = filtered.filter(m => m.id < beforeId);
+      }
+      
+      // сортируем по убыванию id, чтобы взять последние сообщения~~
+      filtered.sort((a, b) => b.id - a.id);
+      
+      const sliced = filtered.slice(0, limit);
+      // переворачиваем обратно в хронологический порядок~~
+      sliced.reverse();
+
+      return sliced.map(r => {
         const u = dbData.users.find(usr => usr.username.toLowerCase() === r.sender.toLowerCase());
         
         let replyToSender = null;
@@ -1265,7 +1294,9 @@ app.get('/api/users/:username', authenticateToken, async (req, res) => {
 // получение сообщений~~
 app.get('/api/messages/:channelId', authenticateToken, async (req, res) => {
   try {
-    const rows = await db.getMessages(req.params.channelId);
+    const limit = parseInt(req.query.limit) || 50;
+    const beforeId = req.query.before ? parseInt(req.query.before) : null;
+    const rows = await db.getMessages(req.params.channelId, limit, beforeId);
     res.json(rows);
   } catch (e) {
     res.status(500).json({ error: e.message });

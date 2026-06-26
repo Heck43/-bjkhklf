@@ -2021,6 +2021,20 @@ body {
   margin-left: -4px;
 }
 
+/* кнопка загрузки истории сообщений~~ */
+.load-more-btn {
+  transition: background-color 0.2s ease, color 0.2s ease, transform 0.1s ease !important;
+}
+
+.load-more-btn:hover {
+  background-color: rgba(88, 101, 242, 0.2) !important;
+  color: #fff !important;
+}
+
+.load-more-btn:active {
+  transform: scale(0.96) !important;
+}
+
 /* --------- МОБИЛЬНЫЙ АДАПТИВ ня~~ --------- */
 @media (max-width: 768px) {
   /* Скрываем десктопные ресайзеры */

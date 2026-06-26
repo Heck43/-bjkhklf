@@ -148,7 +148,6 @@ function ServerInviteCard({ serverId }) {
 // мрррр~~ это наша область чатика!
 // мы скроллим вниз при новых сообщениях и поддерживаем поиск, ня!
 // а еще тут можно писать милые штучки хозяину... owo 🐾
-
 export default function ChatArea() {
   const { 
     activeServerId, 
@@ -160,7 +159,8 @@ export default function ChatArea() {
     userProfile, 
     viewUserProfile,
     addReaction,
-    removeReaction
+    removeReaction,
+    fetchMessages
   } = useStore();
   
   const [inputText, setInputText] = useState('');
@@ -205,9 +205,18 @@ export default function ChatArea() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  const latestMessageId = chatMessages[chatMessages.length - 1]?.id;
+
   useEffect(() => {
     scrollToBottom();
-  }, [chatMessages.length]);
+  }, [latestMessageId]);
+
+  const handleLoadMore = () => {
+    const oldestMessageId = chatMessages[0]?.id;
+    if (oldestMessageId) {
+      fetchMessages(chatKey, 50, oldestMessageId);
+    }
+  };
 
   const handleSend = (e) => {
     e.preventDefault();
@@ -325,6 +334,29 @@ export default function ChatArea() {
               <span className="welcome-logo">{isDm ? '💬' : '👋'}</span>
               <span className="welcome-title">{isDm ? `Добро пожаловать в личный чат с ${channelName}!` : `Добро пожаловать в #${channelName}!`}</span>
               <span className="welcome-desc">Напишите первое сообщение, чтобы начать беседу!</span>
+            </div>
+          )}
+
+          {/* кнопка загрузки более старых сообщений~~ */}
+          {chatMessages.length >= 50 && (
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 15px 0' }}>
+              <button 
+                className="load-more-btn"
+                onClick={handleLoadMore}
+                style={{
+                  backgroundColor: 'rgba(88, 101, 242, 0.1)',
+                  color: 'var(--discord-blurple)',
+                  border: '1px solid var(--discord-blurple)',
+                  padding: '6px 16px',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: '500',
+                  transition: 'background-color 0.2s, transform 0.1s'
+                }}
+              >
+                Загрузить предыдущие сообщения ня~~ 🐾
+              </button>
             </div>
           )}
 
