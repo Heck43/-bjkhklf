@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">furrdis</string>
+    <string name="title_activity_main">furrdis</string>
+    <string name="package_name">com.foxy.furrdis</string>
+    <string name="custom_url_scheme">com.foxy.furrdis</string>
+</resources>

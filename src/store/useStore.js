@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { io } from 'socket.io-client';
+import { playMessageSound, playMentionSound, playJoinSound, playLeaveSound } from '../utils/sounds.js';
 
 // привеееет, это наш стор на Zustand, подключенный к реальной БД sqlite3!
 // теперь все данные сохраняются на сервере и доступны в сети на Railway.com~~ мяу! 🐾
@@ -195,8 +196,20 @@ export const useStore = create((set, get) => ({
 
       // показываем уведомление в браузере при свернутой вкладке~~
       if (message.sender !== currentUser.username) {
+        // проверяем, есть ли @упоминание нашего имени в сообщении ня~~
+        const isMentioned = currentUser.username && message.content &&
+          message.content.toLowerCase().includes('@' + currentUser.username.toLowerCase());
+
+        if (isMentioned) {
+          // дин-дон для упоминания, это важно~~
+          playMentionSound();
+        } else {
+          // обычный тихий бип для нового сообщения мурррр~~
+          playMessageSound();
+        }
+
         if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted' && document.hidden) {
-          new Notification(`Новое сообщение от ${message.sender}! 💬`, {
+          new Notification(isMentioned ? `Тебя упомянули в @${channelId}! 🔔` : `Новое сообщение от ${message.sender}! 💬`, {
             body: message.content,
             tag: 'msg_' + channelId
           });
@@ -762,6 +775,8 @@ export const useStore = create((set, get) => ({
       audioLevels: [{ name: user.username, level: 10 }]
     };
 
+    // звук входа в голосовой канал ня~~
+    playJoinSound();
     set({ activeCall: callData, activeChannelId: channelId });
   },
 
@@ -811,6 +826,8 @@ export const useStore = create((set, get) => ({
     if (localStream) {
       localStream.getTracks().forEach(track => track.stop());
     }
+    // звук выхода из звоночка мяууу~~
+    playLeaveSound();
     set({ activeCall: null, localStream: null, remoteStream: null });
   },
 

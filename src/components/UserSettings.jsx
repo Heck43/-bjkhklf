@@ -166,9 +166,11 @@ function VoiceSettingsTab() {
 function AppearanceSettingsTab() {
   const [theme, setTheme] = useState(localStorage.getItem('theme_preset') || 'dark');
   const [fontSize, setFontSize] = useState(parseInt(localStorage.getItem('chat_font_size') || '14'));
+  const [soundsEnabled, setSoundsEnabled] = useState(localStorage.getItem('sounds_enabled') !== 'false');
 
   const changeTheme = (themeName) => {
     const root = document.documentElement;
+    // применяем css-переменные для каждой темы, мррр~~
     if (themeName === 'dark') {
       root.style.setProperty('--background-chat', '#313338');
       root.style.setProperty('--background-sidebar', '#2b2d31');
@@ -176,6 +178,9 @@ function AppearanceSettingsTab() {
       root.style.setProperty('--background-darkest', '#111214');
       root.style.setProperty('--discord-blurple', '#5865f2');
       root.style.setProperty('--text-normal', '#dbdee1');
+      root.style.setProperty('--text-muted', '#949ba4');
+      root.style.setProperty('--header-primary', '#f2f3f5');
+      root.style.setProperty('--glass-bg', 'rgba(43, 45, 49, 0.7)');
     } else if (themeName === 'light') {
       root.style.setProperty('--background-chat', '#f2f3f5');
       root.style.setProperty('--background-sidebar', '#e3e5e8');
@@ -183,6 +188,9 @@ function AppearanceSettingsTab() {
       root.style.setProperty('--background-darkest', '#bfbfbf');
       root.style.setProperty('--discord-blurple', '#4752c4');
       root.style.setProperty('--text-normal', '#2e3338');
+      root.style.setProperty('--text-muted', '#5c6069');
+      root.style.setProperty('--header-primary', '#060607');
+      root.style.setProperty('--glass-bg', 'rgba(227, 229, 232, 0.7)');
     } else if (themeName === 'pink') {
       root.style.setProperty('--background-chat', '#fff0f3');
       root.style.setProperty('--background-sidebar', '#ffe5ec');
@@ -190,6 +198,9 @@ function AppearanceSettingsTab() {
       root.style.setProperty('--background-darkest', '#ffb3c6');
       root.style.setProperty('--discord-blurple', '#ff4d6d');
       root.style.setProperty('--text-normal', '#5c0632');
+      root.style.setProperty('--text-muted', '#9e3059');
+      root.style.setProperty('--header-primary', '#3b0020');
+      root.style.setProperty('--glass-bg', 'rgba(255, 194, 209, 0.7)');
     } else if (themeName === 'cyberpunk') {
       root.style.setProperty('--background-chat', '#0f0f1b');
       root.style.setProperty('--background-sidebar', '#18122b');
@@ -197,6 +208,9 @@ function AppearanceSettingsTab() {
       root.style.setProperty('--background-darkest', '#02000a');
       root.style.setProperty('--discord-blurple', '#ff007f');
       root.style.setProperty('--text-normal', '#00ffff');
+      root.style.setProperty('--text-muted', '#00aaaa');
+      root.style.setProperty('--header-primary', '#ff00ff');
+      root.style.setProperty('--glass-bg', 'rgba(24, 18, 43, 0.7)');
     }
     setTheme(themeName);
     localStorage.setItem('theme_preset', themeName);
@@ -206,6 +220,13 @@ function AppearanceSettingsTab() {
     document.documentElement.style.setProperty('--chat-font-size', `${size}px`);
     setFontSize(size);
     localStorage.setItem('chat_font_size', size);
+  };
+
+  // переключаем звуки уведомлений ня~~
+  const toggleSounds = () => {
+    const next = !soundsEnabled;
+    setSoundsEnabled(next);
+    localStorage.setItem('sounds_enabled', String(next));
   };
 
   return (
@@ -282,6 +303,60 @@ function AppearanceSettingsTab() {
             </div>
           </div>
         </div>
+
+        {/* блок включения/выключения звуков уведомлений~~ мрррр! */}
+        <div>
+          <span style={{ fontSize: 11, fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', marginBottom: 12 }}>звуковые уведомления 🎵</span>
+          <div
+            onClick={toggleSounds}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '14px 16px',
+              borderRadius: 8,
+              backgroundColor: 'var(--background-darkest)',
+              cursor: 'pointer',
+              border: '1px solid var(--glass-border)',
+              transition: 'background-color 0.15s ease',
+              userSelect: 'none'
+            }}
+          >
+            <div>
+              <div style={{ fontWeight: 'bold', fontSize: 14, color: 'var(--text-normal)' }}>
+                {soundsEnabled ? '🔔 звуки включены' : '🔕 звуки выключены'}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>
+                {soundsEnabled
+                  ? 'бип при новых сообщениях и дин-дон при @упоминаниях~~'
+                  : 'все звуки уведомлений тихо спят, ня~~'}
+              </div>
+            </div>
+            {/* красивый тумблер переключения~~ */}
+            <div style={{
+              width: 44,
+              height: 24,
+              borderRadius: 12,
+              backgroundColor: soundsEnabled ? 'var(--discord-blurple)' : 'rgba(255,255,255,0.15)',
+              position: 'relative',
+              transition: 'background-color 0.2s ease',
+              flexShrink: 0
+            }}>
+              <div style={{
+                width: 18,
+                height: 18,
+                borderRadius: '50%',
+                backgroundColor: '#fff',
+                position: 'absolute',
+                top: 3,
+                left: soundsEnabled ? 23 : 3,
+                transition: 'left 0.2s ease',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.4)'
+              }} />
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
   );

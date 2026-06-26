@@ -15,9 +15,15 @@
     "postinstall": "npm run build",
     "electron:start": "electron electron.cjs",
     "electron:pack": "electron-builder build --win --x64 --dir",
-    "electron:dist": "electron-builder build --win --x64"
+    "electron:dist": "electron-builder build --win --x64",
+    "android:sync": "npm run build && npx cap sync android",
+    "android:open": "npx cap open android",
+    "android:build": "npm run build && npx cap sync android && npx cap open android"
   },
   "dependencies": {
+    "@capacitor/android": "^8.4.1",
+    "@capacitor/cli": "^8.4.1",
+    "@capacitor/core": "^8.4.1",
     "@hookform/resolvers": "^5.4.0",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",

@@ -35,3 +35,10 @@ database.json
 dist_electron/
 out/
 *.pak
+
+# Capacitor Android build artifacts (gradle cache, builds)
+android/.gradle/
+android/build/
+android/app/build/
+android/.idea/
+android/local.properties
