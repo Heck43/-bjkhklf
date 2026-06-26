@@ -47,11 +47,11 @@ jobs:
         run: npx cap sync android
 
       # устанавливаем java для gradle~~
-      - name: ☕ Setup Java 17
+      - name: ☕ Setup Java 21 (capacitor android требует 21, мяу~~)
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '21'
 
       # устанавливаем android sdk командной строки~~
       - name: 🤖 Setup Android SDK
