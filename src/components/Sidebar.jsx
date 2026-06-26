@@ -8,7 +8,7 @@ import ServerSettingsModal from './ServerSettingsModal';
 // тут живут каналы и личные переписки...
 // а в самом низу профиль нашего хозяина~~ мяу! 🐾
 
-export default function Sidebar({ style }) {
+export default function Sidebar({ style, onChannelSelect }) {
   const {
     activeServerId,
     activeChannelId,
@@ -64,11 +64,13 @@ export default function Sidebar({ style }) {
     } else {
       navigate(`/channels/${activeServerId}/${channel.id}`);
     }
+    if (onChannelSelect) onChannelSelect();
   };
 
   const handleDmUserClick = (friend) => {
     // переходим в личный чат с другом через роутер~~
     navigate(`/channels/@me/dm_${friend.id}`);
+    if (onChannelSelect) onChannelSelect();
   };
 
   const handleCreateChannelClick = (type) => {
@@ -90,6 +92,7 @@ export default function Sidebar({ style }) {
         startCall(res.channel.id, res.channel.name);
         navigate(`/channels/${activeServerId}/${res.channel.id}`);
       }
+      if (onChannelSelect) onChannelSelect();
     }
   };
 
@@ -127,7 +130,10 @@ export default function Sidebar({ style }) {
             {/* навигация для главной страницы (ЛС / Друзья)~~ */}
             <div 
               className={`channel-item ${activeChannelId === 'friends' ? 'active' : ''}`}
-              onClick={() => navigate('/channels/@me/friends')}
+              onClick={() => {
+                navigate('/channels/@me/friends');
+                if (onChannelSelect) onChannelSelect();
+              }}
             >
               <Users size={18} />
               <span className="channel-name">Друзья</span>

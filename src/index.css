@@ -2020,3 +2020,342 @@ body {
 .members-resizer {
   margin-left: -4px;
 }
+
+/* --------- МОБИЛЬНЫЙ АДАПТИВ ня~~ --------- */
+@media (max-width: 768px) {
+  /* Скрываем десктопные ресайзеры */
+  .layout-resizer {
+    display: none !important;
+  }
+
+  /* Для основного контейнера на мобилках */
+  .app-container.mobile-layout {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+    width: 100vw;
+    overflow: hidden;
+    position: relative;
+    background-color: var(--background-primary);
+  }
+
+  /* Скрываем прямых детей, которые должны быть только на десктопе */
+  .app-container.mobile-layout > .server-bar,
+  .app-container.mobile-layout > .sidebar,
+  .app-container.mobile-layout > .members-sidebar {
+    display: none !important;
+  }
+
+  /* Настройки выдвижных ящиков */
+  .mobile-servers-drawer {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 72px;
+    height: 100%;
+    z-index: 100;
+    transform: translateX(-100%);
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    background-color: var(--background-servers);
+    box-shadow: 4px 0 15px rgba(0, 0, 0, 0.5);
+    display: flex;
+  }
+
+  .mobile-servers-drawer.open {
+    transform: translateX(0);
+  }
+
+  .mobile-sidebar-drawer {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 240px;
+    height: 100%;
+    z-index: 100;
+    transform: translateX(-100%);
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    background-color: var(--background-sidebar);
+    box-shadow: 4px 0 15px rgba(0, 0, 0, 0.5);
+    display: flex;
+  }
+
+  .mobile-sidebar-drawer.open {
+    transform: translateX(0);
+  }
+
+  /* Внутренние компоненты внутри ящиков */
+  .mobile-servers-drawer > .server-bar {
+    width: 100% !important;
+    height: 100% !important;
+    border-right: none !important;
+  }
+
+  .mobile-sidebar-drawer > .sidebar {
+    width: 100% !important;
+    height: 100% !important;
+    border-right: none !important;
+  }
+
+  /* Оверлей для закрытия по тапу вне панели */
+  .mobile-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.55);
+    z-index: 90;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+  }
+
+  .mobile-overlay.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* Мобильный контент и хедер */
+  .mobile-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .mobile-header {
+    height: 48px;
+    background-color: var(--background-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 8px;
+    border-bottom: 1px solid var(--background-darkest);
+    z-index: 10;
+    flex-shrink: 0;
+  }
+
+  .mobile-header-title {
+    font-size: 16px;
+    font-weight: bold;
+    color: var(--text-normal);
+    text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 60%;
+  }
+
+  .mobile-header-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 20px;
+    cursor: pointer;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: background-color 0.2s, color 0.2s;
+  }
+
+  .mobile-header-btn:active,
+  .mobile-header-btn.active {
+    background-color: rgba(255, 255, 255, 0.08);
+    color: var(--text-normal);
+  }
+
+  .mobile-page-content {
+    flex: 1;
+    display: flex;
+    position: relative;
+    overflow: hidden;
+    width: 100%;
+    background-color: var(--background-primary);
+  }
+
+  /* Чат и список друзей занимают весь экран на мобилках */
+  .mobile-page-content > .chat-container,
+  .mobile-page-content > .friends-page {
+    width: 100% !important;
+    height: 100% !important;
+    flex: 1 !important;
+  }
+
+  /* Скрываем десктопный хедер чата */
+  .chat-container > .chat-header {
+    display: none !important;
+  }
+
+  /* Ужимаем форму отправки */
+  .chat-input-form {
+    padding: 8px 8px 12px 8px !important;
+  }
+  .chat-input-wrapper {
+    padding: 8px 12px !important;
+    gap: 8px !important;
+  }
+
+  /* Друзья: вкладки */
+  .friends-tabs {
+    padding: 0 8px !important;
+    gap: 8px !important;
+    overflow-x: auto;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+  }
+  .friends-tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .friends-title-container,
+  .friends-tabs .header-separator {
+    display: none !important;
+  }
+  .tab-item {
+    flex-shrink: 0;
+    font-size: 13px !important;
+    padding: 6px 10px !important;
+  }
+
+  /* Нижняя панель навигации */
+  .mobile-nav {
+    height: 56px;
+    background-color: var(--background-secondary-alt);
+    border-top: 1px solid var(--background-darkest);
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    z-index: 10;
+    flex-shrink: 0;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.15);
+  }
+
+  .mobile-nav-btn {
+    background: none;
+    border: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    cursor: pointer;
+    flex: 1;
+    height: 100%;
+    padding: 4px 0;
+    transition: color 0.15s, transform 0.1s;
+    outline: none;
+  }
+
+  .mobile-nav-btn:active {
+    transform: scale(0.95);
+  }
+
+  .mobile-nav-btn.active {
+    color: var(--discord-blurple);
+  }
+
+  .mobile-nav-icon {
+    font-size: 20px;
+    margin-bottom: 2px;
+  }
+
+  .mobile-nav-label {
+    font-size: 10px;
+    font-weight: 500;
+  }
+
+  /* Адаптация некоторых внутренних компонентов */
+  .members-sidebar {
+    width: 100% !important;
+    border-left: none !important;
+    background-color: var(--background-primary) !important;
+  }
+
+  .sidebar-footer {
+    padding: 0 8px !important;
+    height: 52px !important;
+  }
+
+  /* Модалки настроек */
+  .settings-modal:not(.full-screen) {
+    width: 90% !important;
+    max-width: 440px !important;
+  }
+
+  .profile-card {
+    width: 90% !important;
+    max-width: 340px !important;
+  }
+
+  /* Полные настройки на мобилках */
+  .settings-modal.full-screen {
+    flex-direction: column !important;
+  }
+
+  .settings-sidebar {
+    width: 100% !important;
+    padding: 12px !important;
+    flex-direction: row !important;
+    height: auto !important;
+    overflow-x: auto !important;
+    gap: 8px !important;
+    white-space: nowrap !important;
+    border-bottom: 1px solid var(--background-darkest) !important;
+    border-right: none !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  .settings-sidebar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .settings-sidebar-header {
+    display: none !important;
+  }
+
+  .settings-sidebar-item {
+    display: inline-block !important;
+    margin: 0 !important;
+    font-size: 13px !important;
+    padding: 6px 10px !important;
+    flex-shrink: 0;
+  }
+
+  .settings-content-wrapper {
+    padding: 16px !important;
+    width: 100% !important;
+  }
+
+  .esc-btn-container {
+    right: 16px !important;
+    top: 16px !important;
+  }
+  .esc-btn-text {
+    display: none !important;
+  }
+
+  /* Звонки и графики */
+  .call-layout {
+    padding: 12px !important;
+    gap: 12px !important;
+  }
+  
+  .call-charts-section {
+    grid-template-columns: 1fr !important;
+  }
+
+  .call-bar {
+    padding: 8px !important;
+  }
+  .call-info-left {
+    display: none !important;
+  }
+}

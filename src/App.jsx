@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Routes, Route, Navigate, useParams, useNavigate } from 'react-router-dom';
 import { useStore } from './store/useStore';
-import { io } from 'socket.io-client';
 import ServerBar from './components/ServerBar';
 import Sidebar from './components/Sidebar';
 import FriendsList from './components/FriendsList';
@@ -30,7 +29,6 @@ function MemberBar({ style }) {
     if (!role || role.toLowerCase() === 'member') return null;
     let bgColor = 'rgba(114, 137, 218, 0.15)';
     let color = '#7289da';
-    
     const lower = role.toLowerCase();
     if (lower === 'owner') {
       bgColor = 'rgba(250, 168, 26, 0.15)';
@@ -39,19 +37,17 @@ function MemberBar({ style }) {
       bgColor = 'rgba(237, 66, 69, 0.15)';
       color = '#ED4245';
     } else {
-      // для остальных кастомных ролей даем красивый розовый/фиолетовый акцент~~
       bgColor = 'rgba(255, 141, 161, 0.15)';
       color = '#ff8da1';
     }
-    
     return (
-      <span style={{ 
-        fontSize: 9, 
-        textTransform: 'uppercase', 
-        padding: '2px 6px', 
-        borderRadius: 4, 
-        backgroundColor: bgColor, 
-        color: color, 
+      <span style={{
+        fontSize: 9,
+        textTransform: 'uppercase',
+        padding: '2px 6px',
+        borderRadius: 4,
+        backgroundColor: bgColor,
+        color: color,
         fontWeight: 'bold',
         marginLeft: 6,
         display: 'inline-block',
@@ -144,41 +140,44 @@ function MemberBar({ style }) {
 // обертка для синхронизации роутов с Zustand стором~~
 function MainLayout() {
   const { serverId, channelId } = useParams();
-  const { setNavigation, friends, servers, isAuthenticated, fetchInitialData, activeCall } = useStore();
+  const { setNavigation, friends, servers, isAuthenticated, fetchInitialData, activeCall, userProfile, showSettings, setShowSettings } = useStore();
   const navigate = useNavigate();
 
   // стейты и рефы для изменения ширины колонок~~ ня! 🐾
   const [sidebarWidth, setSidebarWidth] = useState(240);
   const [membersWidth, setMembersWidth] = useState(240);
 
+  // мобильная навигация~~
+  const [mobileView, setMobileView] = useState('chat');
+  const [showSidebar, setShowSidebar] = useState(false);
+  const [showServers, setShowServers] = useState(false);
+
+  // хук определения мобильного устройства~~
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const sidebarWidthRef = useRef(sidebarWidth);
   const membersWidthRef = useRef(membersWidth);
 
-  useEffect(() => {
-    sidebarWidthRef.current = sidebarWidth;
-  }, [sidebarWidth]);
-
-  useEffect(() => {
-    membersWidthRef.current = membersWidth;
-  }, [membersWidth]);
+  useEffect(() => { sidebarWidthRef.current = sidebarWidth; }, [sidebarWidth]);
+  useEffect(() => { membersWidthRef.current = membersWidth; }, [membersWidth]);
 
   const startSidebarResize = (e) => {
     e.preventDefault();
     const startX = e.clientX;
     const startWidth = sidebarWidthRef.current;
-
     const doResize = (moveEvent) => {
-      const deltaX = moveEvent.clientX - startX;
-      // Ограничиваем ширину сайдбара от 200px до 400px~~
-      const newWidth = Math.max(200, Math.min(400, startWidth + deltaX));
+      const newWidth = Math.max(200, Math.min(400, startWidth + moveEvent.clientX - startX));
       setSidebarWidth(newWidth);
     };
-
     const stopResize = () => {
       document.removeEventListener('mousemove', doResize);
       document.removeEventListener('mouseup', stopResize);
     };
-
     document.addEventListener('mousemove', doResize);
     document.addEventListener('mouseup', stopResize);
   };
@@ -187,19 +186,14 @@ function MainLayout() {
     e.preventDefault();
     const startX = e.clientX;
     const startWidth = membersWidthRef.current;
-
     const doResize = (moveEvent) => {
-      const deltaX = moveEvent.clientX - startX;
-      // Ограничиваем ширину участников от 200px до 350px~~
-      const newWidth = Math.max(200, Math.min(350, startWidth - deltaX));
+      const newWidth = Math.max(200, Math.min(350, startWidth - moveEvent.clientX + startX));
       setMembersWidth(newWidth);
     };
-
     const stopResize = () => {
       document.removeEventListener('mousemove', doResize);
       document.removeEventListener('mouseup', stopResize);
     };
-
     document.addEventListener('mousemove', doResize);
     document.addEventListener('mouseup', stopResize);
   };
@@ -214,7 +208,6 @@ function MainLayout() {
 
   useEffect(() => {
     if (!isAuthenticated) return;
-    // синхронизируем URL со стором, ня!
     if (serverId === '@me' || !serverId) {
       if (!channelId || channelId === 'friends') {
         setNavigation(null, 'friends', null);
@@ -224,39 +217,150 @@ function MainLayout() {
         if (friend) {
           setNavigation(null, channelId, friend);
         } else {
-          // если друга нет, редиректим на друзей~~
           navigate('/channels/@me/friends', { replace: true });
         }
       }
     } else {
       const server = servers.find(s => s.id === serverId);
       if (server) {
-        // если канал не указан, берем первый доступный~~
         const targetChannelId = channelId || server.channels[0]?.id;
         const channel = server.channels.find(c => c.id === targetChannelId);
-        
         if (channel) {
           setNavigation(serverId, targetChannelId, null);
         } else {
           navigate(`/channels/${serverId}/${server.channels[0]?.id}`, { replace: true });
         }
       } else {
-        // если сервера нет, редиректим на главную~~
         navigate('/channels/@me/friends', { replace: true });
       }
     }
+    // при смене канала на мобилке — сразу переключаем на чат~~
+    if (isMobile) {
+      setMobileView('chat');
+      setShowSidebar(false);
+      setShowServers(false);
+    }
   }, [serverId, channelId, friends, servers, setNavigation, navigate]);
 
-  // рендерим нужный контент в зависимости от пути~~
   const isHome = serverId === '@me' || !serverId;
   const isFriends = isHome && (!channelId || channelId === 'friends');
   const isDmChat = isHome && channelId?.startsWith('dm_');
-
-  // если сервер, проверяем тип активного канала~~
   const activeServer = servers.find(s => s.id === serverId);
   const activeChannel = activeServer?.channels.find(c => c.id === channelId);
   const isVoice = activeChannel?.type === 'voice';
 
+  // --------- МОБИЛЬНЫЙ РЕНДЕР ня~~ ---------
+  if (isMobile) {
+    // название текущего экрана для хедера~~
+    let headerTitle = 'furrdis';
+    if (isFriends) headerTitle = '👥 Друзья';
+    else if (isDmChat) headerTitle = '💬 ЛС';
+    else if (activeChannel) headerTitle = `# ${activeChannel.name}`;
+
+    return (
+      <div className="app-container mobile-layout">
+        {activeCall && <VoiceCallManager />}
+
+        {/* затемняющий оверлей~~ */}
+        {(showServers || showSidebar) && (
+          <div
+            className="mobile-overlay visible"
+            onClick={() => { setShowServers(false); setShowSidebar(false); }}
+          />
+        )}
+
+        {/* выдвигающийся ящик серверов~~ */}
+        <div className={`mobile-servers-drawer ${showServers ? 'open' : ''}`}>
+          <ServerBar onMobileSelect={() => { setShowServers(false); setShowSidebar(true); }} />
+        </div>
+
+        {/* выдвигающийся ящик каналов~~ */}
+        <div className={`mobile-sidebar-drawer ${showSidebar ? 'open' : ''}`}>
+          <Sidebar onChannelSelect={() => { setShowSidebar(false); setMobileView('chat'); }} />
+        </div>
+
+        {/* основной контент~~ */}
+        <div className="mobile-content">
+
+          {/* мобильный хедер~~ */}
+          <div className="mobile-header">
+            <button
+              className="mobile-header-btn"
+              onClick={() => { setShowSidebar(true); setShowServers(false); }}
+              aria-label="открыть каналы"
+            >
+              ☰
+            </button>
+            <span className="mobile-header-title">{headerTitle}</span>
+            {!isHome ? (
+              <button
+                className={`mobile-header-btn ${mobileView === 'members' ? 'active' : ''}`}
+                onClick={() => setMobileView(v => v === 'members' ? 'chat' : 'members')}
+                aria-label="участники"
+              >
+                👥
+              </button>
+            ) : (
+              <div style={{ width: 40 }} />
+            )}
+          </div>
+
+          {/* контент страницы~~ */}
+          <div className="mobile-page-content">
+            {mobileView === 'members' && !isHome ? (
+              <MemberBar style={{ width: '100%', flex: 1, overflowY: 'auto' }} />
+            ) : (
+              <>
+                {isFriends && <FriendsList />}
+                {isDmChat && <ChatArea />}
+                {!isHome && (isVoice ? <VoiceCall /> : <ChatArea />)}
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* нижняя панель навигации~~ мрррр! */}
+        <nav className="mobile-nav">
+          <button
+            className={`mobile-nav-btn ${showServers ? 'active' : ''}`}
+            onClick={() => { setShowServers(v => !v); setShowSidebar(false); }}
+          >
+            <span className="mobile-nav-icon">🏠</span>
+            <span className="mobile-nav-label">серверы</span>
+          </button>
+
+          <button
+            className="mobile-nav-btn"
+            onClick={() => { setShowSidebar(v => !v); setShowServers(false); }}
+          >
+            <span className="mobile-nav-icon">#</span>
+            <span className="mobile-nav-label">каналы</span>
+          </button>
+
+          <button
+            className={`mobile-nav-btn ${mobileView === 'chat' && !showSidebar && !showServers ? 'active' : ''}`}
+            onClick={() => { setMobileView('chat'); setShowSidebar(false); setShowServers(false); }}
+          >
+            <span className="mobile-nav-icon">💬</span>
+            <span className="mobile-nav-label">чат</span>
+          </button>
+
+          <button
+            className="mobile-nav-btn"
+            onClick={() => { setShowSettings && setShowSettings(true); }}
+          >
+            <span className="mobile-nav-icon">⚙️</span>
+            <span className="mobile-nav-label">профиль</span>
+          </button>
+        </nav>
+
+        <UserSettings />
+        <UserProfileModal />
+      </div>
+    );
+  }
+
+  // --------- ДЕСКТОП РЕНДЕР (старый) ~~ ---------
   return (
     <div className="app-container">
       {activeCall && <VoiceCallManager />}
@@ -272,7 +376,7 @@ function MainLayout() {
       {/* 3. Центральная часть в зависимости от пути */}
       {isFriends && <FriendsList />}
       {isDmChat && <ChatArea />}
-      
+
       {!isHome && (
         isVoice ? (
           <VoiceCall />
@@ -306,7 +410,7 @@ export default function App() {
       <Route path="/channels/@me/:channelId" element={<MainLayout />} />
       <Route path="/channels/:serverId" element={<MainLayout />} />
       <Route path="/channels/:serverId/:channelId" element={<MainLayout />} />
-      
+
       {/* редирект для всех неизвестных путей */}
       <Route path="*" element={<Navigate to="/channels/@me/friends" replace />} />
     </Routes>

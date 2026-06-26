@@ -6,7 +6,7 @@ import { Compass, Plus, X } from 'lucide-react';
 // мяууу~~ вот наша панель серверов!
 // тут мы переключаемся между серверами, это так удобно! 🐾
 
-export default function ServerBar() {
+export default function ServerBar({ onMobileSelect }) {
   const { servers, activeServerId, createServer, joinServer, unreadCounts } = useStore();
   const navigate = useNavigate();
 
@@ -21,6 +21,7 @@ export default function ServerBar() {
   const handleHomeClick = () => {
     // переходим на домашний экран через роутер~~
     navigate('/channels/@me/friends');
+    if (onMobileSelect) onMobileSelect();
   };
 
   const handleServerClick = (server) => {
@@ -31,6 +32,7 @@ export default function ServerBar() {
     } else {
       navigate(`/channels/${server.id}/none`);
     }
+    if (onMobileSelect) onMobileSelect();
   };
 
   const handleCreateServer = async (e) => {
@@ -47,6 +49,7 @@ export default function ServerBar() {
       } else {
         navigate(`/channels/${res.server.id}/none`);
       }
+      if (onMobileSelect) onMobileSelect();
     }
   };
 
@@ -65,6 +68,7 @@ export default function ServerBar() {
       } else {
         navigate('/channels/@me/friends');
       }
+      if (onMobileSelect) onMobileSelect();
     } else {
       setJoinError(res.message || 'сервер не найден!');
     }
