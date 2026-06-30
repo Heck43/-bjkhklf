@@ -247,6 +247,12 @@ export default function ChatArea() {
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
 
+  // вычисляем ключ чата: для ЛС это симметричный ключ dm_user1_user2, для серверов просто id канала~~
+  const isDm = activeServerId === null && activeDmUser !== null;
+  const chatKey = isDm 
+    ? 'dm_' + [userProfile.username, activeDmUser.username].sort().join('_')
+    : activeChannelId;
+
   const handleInputChange = (e) => {
     setInputText(e.target.value);
     sendTypingStatus(chatKey, true);
@@ -267,12 +273,6 @@ export default function ChatArea() {
       }
     };
   }, [chatKey]);
-
-  // вычисляем ключ чата: для ЛС это симметричный ключ dm_user1_user2, для серверов просто id канала~~
-  const isDm = activeServerId === null && activeDmUser !== null;
-  const chatKey = isDm 
-    ? 'dm_' + [userProfile.username, activeDmUser.username].sort().join('_')
-    : activeChannelId;
 
   // ищем название канала или пользователя~~
   let channelName = '';
