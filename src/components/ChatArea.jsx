@@ -3,6 +3,7 @@ import { useStore } from '../store/useStore';
 import { useNavigate } from 'react-router-dom';
 import { Hash, Search, Send, User, Paperclip, Smile, CornerUpLeft, Pencil, X } from 'lucide-react';
 import { getBackendUrl } from '../utils/url.js';
+import { compressImage } from '../utils/image.js';
 
 // компонент для виджета приглашений на приватные серверы~~ мяу! 🐾
 function ServerInviteCard({ serverId }) {
@@ -287,13 +288,16 @@ export default function ChatArea() {
         const file = item.getAsFile();
         if (!file) continue;
 
-        if (file.size > 50 * 1024 * 1024) {
+        // Сжимаем картинку на клиенте перед отправкой, ня~~
+        const processedFile = await compressImage(file);
+
+        if (processedFile.size > 50 * 1024 * 1024) {
           alert("Оййй, картинка из буфера слишком большая! Максимум 50MB, ня~~");
           return;
         }
 
         const formData = new FormData();
-        formData.append('file', file, 'clipboard-image.png');
+        formData.append('file', processedFile, processedFile.name || 'clipboard-image.jpg');
 
         try {
           const token = localStorage.getItem('discord_token');
@@ -376,13 +380,16 @@ export default function ChatArea() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 50 * 1024 * 1024) { // 50MB
+    // Сжимаем картинку на клиенте перед отправкой, ня~~
+    const processedFile = await compressImage(file);
+
+    if (processedFile.size > 50 * 1024 * 1024) { // 50MB
       alert("Оййй, файл слишком большой! Максимум 50MB, ня~~");
       return;
     }
 
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append('file', processedFile, processedFile.name);
 
     try {
       const token = localStorage.getItem('discord_token');
