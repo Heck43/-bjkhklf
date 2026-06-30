@@ -1336,6 +1336,21 @@ app.get('/api/link-preview', authenticateToken, async (req, res) => {
   const { url } = req.query;
   if (!url) return res.status(400).json({ error: 'URL не указан!' });
   try {
+    // Если это ссылка на YouTube, используем их официальный oEmbed API, ня~~
+    if (/youtube\.com|youtu\.be/i.test(url)) {
+      const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
+      const response = await fetch(oembedUrl);
+      if (response.ok) {
+        const data = await response.json();
+        return res.json({
+          title: data.title || null,
+          description: data.author_name ? `Видео от ${data.author_name} на YouTube` : 'YouTube видео',
+          image: data.thumbnail_url || null,
+          url
+        });
+      }
+    }
+
     const response = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
     if (!response.ok) throw new Error('не удалось загрузить страницу');
     const html = await response.text();
