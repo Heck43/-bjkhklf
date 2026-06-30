@@ -145,6 +145,79 @@ function ServerInviteCard({ serverId }) {
   );
 }
 
+// Компонент для красивого предпросмотра ссылок в стиле Discord OpenGraph~~ 🐾
+function LinkPreview({ url }) {
+  const [preview, setPreview] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    const fetchPreview = async () => {
+      try {
+        const token = localStorage.getItem('discord_token');
+        const res = await fetch(`/api/link-preview?url=${encodeURIComponent(url)}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok && active) {
+          const data = await res.json();
+          if (data.title || data.description || data.image) {
+            setPreview(data);
+          }
+        }
+      } catch (e) {
+        console.error('Ошибка предпросмотра ссылки:', e);
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    fetchPreview();
+    return () => { active = false; };
+  }, [url]);
+
+  if (loading || !preview) return null;
+
+  return (
+    <div className="link-preview-card" style={{
+      marginTop: 8,
+      padding: 12,
+      borderRadius: 8,
+      backgroundColor: '#2b2d31',
+      borderLeft: '4px solid var(--discord-blurple)',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 8,
+      maxWidth: 450,
+      boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+      alignSelf: 'flex-start'
+    }}>
+      {preview.title && (
+        <a href={url} target="_blank" rel="noreferrer" style={{
+          color: '#00b0f4',
+          fontWeight: 'bold',
+          fontSize: 14,
+          textDecoration: 'none'
+        }}>
+          {preview.title}
+        </a>
+      )}
+      {preview.description && (
+        <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: '1.4' }}>
+          {preview.description}
+        </div>
+      )}
+      {preview.image && (
+        <img src={preview.image} alt="preview" style={{
+          maxWidth: '100%',
+          maxHeight: 200,
+          objectFit: 'cover',
+          borderRadius: 6,
+          marginTop: 4
+        }} />
+      )}
+    </div>
+  );
+}
+
 // мрррр~~ это наша область чатика!
 // мы скроллим вниз при новых сообщениях и поддерживаем поиск, ня!
 // а еще тут можно писать милые штучки хозяину... owo 🐾
@@ -160,15 +233,40 @@ export default function ChatArea() {
     viewUserProfile,
     addReaction,
     removeReaction,
-    fetchMessages
+    fetchMessages,
+    sendTypingStatus,
+    typingUsers
   } = useStore();
   
   const [inputText, setInputText] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [replyToMessage, setReplyToMessage] = useState(null); // сообщение, на которое отвечаем~~
   const [showReactionPicker, setShowReactionPicker] = useState(null); // id сообщения для поповера реакций~~
+  const [lightboxMedia, setLightboxMedia] = useState(null); // лайтбокс для картинок и видео~~
   
   const messagesEndRef = useRef(null);
+  const typingTimeoutRef = useRef(null);
+
+  const handleInputChange = (e) => {
+    setInputText(e.target.value);
+    sendTypingStatus(chatKey, true);
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    typingTimeoutRef.current = setTimeout(() => {
+      sendTypingStatus(chatKey, false);
+    }, 2000);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+    };
+  }, [chatKey]);
 
   // вычисляем ключ чата: для ЛС это симметричный ключ dm_user1_user2, для серверов просто id канала~~
   const isDm = activeServerId === null && activeDmUser !== null;
@@ -226,20 +324,40 @@ export default function ChatArea() {
     setReplyToMessage(null); // сбрасываем состояние ответа после отправки~~
   };
 
-  // мяууу~~ загрузка картинки в чатик с поддержкой ответа!
-  const handleChatImageChange = (e) => {
+  // мяууу~~ загрузка медиафайла (фото/видео) на сервер и отправка URL!
+  const handleChatFileChange = async (e) => {
     const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 3 * 1024 * 1024) {
-        alert("Оййй, картинка слишком большая! Максимум 3MB, ня~~");
-        return;
-      }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        sendMessage(chatKey, reader.result, isDm, replyToMessage?.id);
+    if (!file) return;
+
+    if (file.size > 50 * 1024 * 1024) { // 50MB
+      alert("Оййй, файл слишком большой! Максимум 50MB, ня~~");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const token = localStorage.getItem('discord_token');
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        sendMessage(chatKey, data.url, isDm, replyToMessage?.id);
         setReplyToMessage(null); // сбрасываем ответ~~
-      };
-      reader.readAsDataURL(file);
+      } else {
+        alert("Не удалось загрузить файл, мяу~~");
+      }
+    } catch (err) {
+      console.error("ошибка загрузки файла:", err);
+      alert("ошибка загрузки файла, ня~~");
+    } finally {
       e.target.value = '';
     }
   };
@@ -253,20 +371,43 @@ export default function ChatArea() {
     }
   };
 
-  // няняня~~ если контент сообщения — картинка base64, рисуем ее красиво!
+  const isImageFile = (url) => {
+    return /\.(png|jpe?g|gif|webp|svg)$/i.test(url) || url.startsWith('data:image/');
+  };
+
+  const isVideoFile = (url) => {
+    return /\.(mp4|webm|ogg|mov)$/i.test(url);
+  };
+
+  const renderTextWithLinks = (text) => {
+    const parts = text.split(/(https?:\/\/[^\s]+)/g);
+    return parts.map((part, index) => {
+      if (part.match(/^https?:\/\/[^\s]+$/)) {
+        return (
+          <a key={index} href={part} target="_blank" rel="noreferrer" style={{ color: '#00b0f4', textDecoration: 'underline' }}>
+            {part}
+          </a>
+        );
+      }
+      return part;
+    });
+  };
+
+  // няняня~~ если контент сообщения — картинка или видео, рисуем красиво!
   const renderMessageContent = (content) => {
-    if (content.startsWith('data:image/')) {
+    if (isImageFile(content)) {
       return (
         <img 
           src={content} 
           alt="chat-attachment" 
           className="message-image"
+          onClick={() => setLightboxMedia({ type: 'image', url: content })}
           style={{
             maxWidth: '100%',
             maxHeight: '300px',
             width: 'auto',
             height: 'auto',
-            alignSelf: 'flex-start', // выравниваем по левому краю, чтобы было ровненько~~ мяу!
+            alignSelf: 'flex-start',
             borderRadius: '8px',
             marginTop: '8px',
             border: '1px solid var(--glass-border)',
@@ -278,16 +419,94 @@ export default function ChatArea() {
       );
     }
 
+    if (isVideoFile(content)) {
+      return (
+        <div style={{ position: 'relative', display: 'flex', flexDirection: 'column' }}>
+          <video 
+            src={content} 
+            controls 
+            playsInline
+            className="message-video"
+            onClick={(e) => {
+              if (e.target.tagName === 'VIDEO') {
+                setLightboxMedia({ type: 'video', url: content });
+              }
+            }}
+            style={{
+              maxWidth: '100%',
+              maxHeight: '300px',
+              width: 'auto',
+              height: 'auto',
+              alignSelf: 'flex-start',
+              borderRadius: '8px',
+              marginTop: '8px',
+              border: '1px solid var(--glass-border)',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+              display: 'block',
+              cursor: 'zoom-in'
+            }}
+          />
+        </div>
+      );
+    }
+
+    // Ищем ссылки в тексте, ня~~
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const urls = content.match(urlRegex) || [];
+
     // Ищем коды серверов в тексте сообщения, ня~~
     const inviteRegex = /s_[a-zA-Z0-9_]+/g;
     const matches = content.match(inviteRegex);
 
     return (
-      <div className="message-content">
-        <div>{content}</div>
+      <div className="message-text-layout" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <span className="message-content" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+          {renderTextWithLinks(content)}
+        </span>
+        {urls.map(url => (
+          <LinkPreview key={url} url={url} />
+        ))}
         {matches && matches.map(serverId => (
           <ServerInviteCard key={serverId} serverId={serverId} />
         ))}
+      </div>
+    );
+  };
+
+  const renderTypingIndicator = () => {
+    const typingList = typingUsers[chatKey] || {};
+    const otherTypists = Object.entries(typingList)
+      .filter(([username]) => username !== userProfile.username)
+      .map(([_, displayName]) => displayName);
+
+    if (otherTypists.length === 0) return null;
+
+    let text = '';
+    if (otherTypists.length === 1) {
+      text = `${otherTypists[0]} печатает...`;
+    } else if (otherTypists.length === 2) {
+      text = `${otherTypists[0]} и ${otherTypists[1]} печатают...`;
+    } else {
+      text = 'Несколько котиков печатают...';
+    }
+
+    return (
+      <div className="typing-indicator" style={{
+        fontSize: '12px',
+        color: 'var(--text-muted)',
+        marginTop: '4px',
+        paddingLeft: '4px',
+        height: '16px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '4px'
+      }}>
+        <span className="typing-dots">
+          <span className="dot" />
+          <span className="dot" />
+          <span className="dot" />
+        </span>
+        {text}
       </div>
     );
   };
@@ -513,20 +732,20 @@ export default function ChatArea() {
             className="chat-input" 
             placeholder={isDm ? `Написать @${channelName}` : `Написать в #${channelName}`}
             value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
+            onChange={handleInputChange}
           />
           <input
             type="file"
-            id="chat-image-upload"
-            accept="image/*"
-            onChange={handleChatImageChange}
+            id="chat-file-upload"
+            accept="image/*,video/*"
+            onChange={handleChatFileChange}
             style={{ display: 'none' }}
           />
           <label
-            htmlFor="chat-image-upload"
+            htmlFor="chat-file-upload"
             className="control-btn"
             style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}
-            title="Загрузить изображение"
+            title="Загрузить файл (фото/видео)"
           >
             <Paperclip size={18} />
           </label>
@@ -534,7 +753,93 @@ export default function ChatArea() {
             <Send size={18} />
           </button>
         </div>
+        {/* Индикатор печатания~~ */}
+        {renderTypingIndicator()}
       </form>
+
+      {/* Лайтбокс модалка для предпросмотра фото и видео~~ */}
+      {lightboxMedia && (
+        <div 
+          className="lightbox-overlay" 
+          onClick={() => setLightboxMedia(null)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.9)',
+            zIndex: 3000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backdropFilter: 'blur(8px)',
+            animation: 'fadeIn 0.25s ease-out'
+          }}
+        >
+          <button 
+            onClick={() => setLightboxMedia(null)}
+            style={{
+              position: 'absolute',
+              top: 20,
+              right: 20,
+              background: 'rgba(0,0,0,0.5)',
+              border: 'none',
+              color: '#fff',
+              fontSize: '24px',
+              cursor: 'pointer',
+              width: '44px',
+              height: '44px',
+              borderRadius: '50%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 3001
+            }}
+          >
+            ✕
+          </button>
+          
+          <div 
+            onClick={(e) => e.stopPropagation()} 
+            style={{
+              maxWidth: '90%',
+              maxHeight: '90%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            {lightboxMedia.type === 'image' ? (
+              <img 
+                src={lightboxMedia.url} 
+                alt="lightbox" 
+                style={{
+                  maxWidth: '100%',
+                  maxHeight: '90vh',
+                  objectFit: 'contain',
+                  borderRadius: '4px',
+                  boxShadow: '0 8px 32px rgba(0,0,0,0.5)'
+                }}
+              />
+            ) : (
+              <video 
+                src={lightboxMedia.url} 
+                controls 
+                autoPlay
+                playsInline
+                style={{
+                  maxWidth: '100%',
+                  maxHeight: '90vh',
+                  objectFit: 'contain',
+                  borderRadius: '4px',
+                  boxShadow: '0 8px 32px rgba(0,0,0,0.5)'
+                }}
+              />
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

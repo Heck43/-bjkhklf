@@ -65,6 +65,7 @@ export const useStore = create((set, get) => ({
   adminUsers: [],
   adminStats: null,
   voiceStates: {}, // { channelId: [participants] }
+  typingUsers: {}, // { [channelId]: { [username]: displayName } }
   
   // настройки~~
   settingsOpen: false,
@@ -324,6 +325,25 @@ export const useStore = create((set, get) => ({
       }
     });
 
+    // слушаем события набора текста~~
+    socket.on('typing_update', (data) => {
+      const { channelId, username, displayName, isTyping } = data;
+      set((state) => {
+        const channelTyping = { ...(state.typingUsers[channelId] || {}) };
+        if (isTyping) {
+          channelTyping[username] = displayName;
+        } else {
+          delete channelTyping[username];
+        }
+        return {
+          typingUsers: {
+            ...state.typingUsers,
+            [channelId]: channelTyping
+          }
+        };
+      });
+    });
+
     set({ socket });
   },
 
@@ -528,6 +548,13 @@ export const useStore = create((set, get) => ({
       });
     } catch (e) {
       console.error('ошибка получения профиля:', e);
+    }
+  },
+
+  sendTypingStatus: (channelId, isTyping) => {
+    const socket = get().socket;
+    if (socket && channelId) {
+      socket.emit('typing', { channelId, isTyping });
     }
   },
 

@@ -42,3 +42,7 @@ android/build/
 android/app/build/
 android/.idea/
 android/local.properties
+
+# Uploaded files
+uploads/*
+!uploads/.gitkeep

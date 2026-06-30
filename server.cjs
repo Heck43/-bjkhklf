@@ -18,6 +18,24 @@ const DB_FILE = path.join(__dirname, 'database.json');
 
 const server = http.createServer(app);
 const { Server } = require('socket.io');
+const multer = require('multer');
+
+// Настраиваем хранилище для multer (загрузка фото/видео)~~
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, path.join(__dirname, 'uploads'));
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname);
+    cb(null, 'file-' + uniqueSuffix + ext);
+  }
+});
+const upload = multer({ 
+  storage: storage,
+  limits: { fileSize: 50 * 1024 * 1024 } // 50MB лимит, ууу~~
+});
+
 const io = new Server(server, {
   cors: {
     origin: "*",
@@ -28,6 +46,7 @@ const io = new Server(server, {
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // --- НАСТРОЙКА БАЗЫ ДАННЫХ ---
 const isPostgres = !!process.env.DATABASE_URL;
@@ -984,6 +1003,20 @@ io.on('connection', (socket) => {
     leaveVoice(socket);
   });
 
+  // Обработка печатания (собеседник печатает...)~~
+  socket.on('typing', (data) => {
+    const { channelId, isTyping } = data;
+    const username = socket.user.username;
+    const displayName = socket.user.displayName || username;
+    
+    socket.to(channelId).emit('typing_update', {
+      channelId,
+      username,
+      displayName,
+      isTyping
+    });
+  });
+
   socket.on('disconnect', () => {
     leaveVoice(socket);
     console.log(`сокет отключился: @${username} (id: ${socket.id})~~ 💾`);
@@ -1283,6 +1316,45 @@ app.get('/api/users/:username', authenticateToken, async (req, res) => {
       customStatus: user.customStatus,
       avatarUrl: user.avatarUrl,
       bannerUrl: user.bannerUrl || ''
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// загрузка файлов (фото, видео)~~
+app.post('/api/upload', authenticateToken, upload.single('file'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'файл не загружен!' });
+  }
+  const fileUrl = `/uploads/${req.file.filename}`;
+  res.json({ url: fileUrl });
+});
+
+// превью ссылок~~
+app.get('/api/link-preview', authenticateToken, async (req, res) => {
+  const { url } = req.query;
+  if (!url) return res.status(400).json({ error: 'URL не указан!' });
+  try {
+    const response = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+    if (!response.ok) throw new Error('не удалось загрузить страницу');
+    const html = await response.text();
+    
+    const getMetaTag = (property) => {
+      const regex = new RegExp(`<meta[^>]+(?:property|name)=["']${property}["'][^>]+content=["']([^"']+)["']|<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']${property}["']`, 'i');
+      const match = html.match(regex);
+      return match ? (match[1] || match[2]) : null;
+    };
+
+    const title = getMetaTag('og:title') || getMetaTag('twitter:title') || html.match(/<title>([^<]+)<\/title>/i)?.[1];
+    const description = getMetaTag('og:description') || getMetaTag('twitter:description') || getMetaTag('description');
+    const image = getMetaTag('og:image') || getMetaTag('twitter:image');
+    
+    res.json({ 
+      title: title?.trim() || null, 
+      description: description?.trim() || null, 
+      image: image || null, 
+      url 
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
