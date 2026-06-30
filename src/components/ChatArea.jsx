@@ -274,6 +274,52 @@ export default function ChatArea() {
     };
   }, [chatKey]);
 
+  // мяууу~~ вставка картинки из буфера обмена напрямую в чатик!
+  const handlePaste = async (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.type.indexOf('image') !== -1) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (!file) continue;
+
+        if (file.size > 50 * 1024 * 1024) {
+          alert("Оййй, картинка из буфера слишком большая! Максимум 50MB, ня~~");
+          return;
+        }
+
+        const formData = new FormData();
+        formData.append('file', file, 'clipboard-image.png');
+
+        try {
+          const token = localStorage.getItem('discord_token');
+          const response = await fetch('/api/upload', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            },
+            body: formData
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            sendMessage(chatKey, data.url, isDm, replyToMessage?.id);
+            setReplyToMessage(null);
+          } else {
+            alert("Не удалось загрузить картинку из буфера, мяу~~");
+          }
+        } catch (err) {
+          console.error("Ошибка вставки картинки:", err);
+          alert("Ошибка загрузки картинки из буфера, ня~~");
+        }
+        break;
+      }
+    }
+  };
+
   // ищем название канала или пользователя~~
   let channelName = '';
   let channelDesc = '';
@@ -742,6 +788,7 @@ export default function ChatArea() {
             placeholder={isDm ? `Написать @${channelName}` : `Написать в #${channelName}`}
             value={inputText}
             onChange={handleInputChange}
+            onPaste={handlePaste}
           />
           <input
             type="file"
