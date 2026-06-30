@@ -517,10 +517,19 @@ export default function ChatArea() {
       <div className="chat-header">
         <div className="header-title-container">
           {isDm ? (
-            <div className="avatar-container" style={{ width: 24, height: 24, marginRight: 4 }}>
-              <div className="avatar" style={{ backgroundColor: '#72767d', fontSize: 10 }}>
-                {channelName.substring(0, 2)}
-              </div>
+            <div className="avatar-container" style={{ width: 28, height: 28, marginRight: 8, position: 'relative' }}>
+              {activeDmUser?.avatarUrl ? (
+                <img 
+                  src={activeDmUser.avatarUrl} 
+                  alt={activeDmUser.username} 
+                  style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} 
+                />
+              ) : (
+                <div className="avatar" style={{ backgroundColor: activeDmUser?.avatarColor || '#ff8da1', width: '100%', height: '100%', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: 11, color: '#fff' }}>
+                  {(activeDmUser?.displayName || activeDmUser?.username || '??').substring(0, 2)}
+                </div>
+              )}
+              <div className={`status-dot ${activeDmUser?.status || 'offline'}`} />
             </div>
           ) : (
             <Hash size={20} className="text-muted" />

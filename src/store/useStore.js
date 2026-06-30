@@ -344,6 +344,37 @@ export const useStore = create((set, get) => ({
       });
     });
 
+    // слушаем обновления статусов активности от сокета~~
+    socket.on('user_status_update', (data) => {
+      const { username, status } = data;
+      set((state) => {
+        const updatedFriends = state.friends.map(f => {
+          if (f.friend_username.toLowerCase() === username.toLowerCase()) {
+            return { ...f, status };
+          }
+          return f;
+        });
+
+        const updatedMembers = state.serverMembers.map(m => {
+          if (m.username.toLowerCase() === username.toLowerCase()) {
+            return { ...m, status };
+          }
+          return m;
+        });
+
+        let updatedDmUser = state.activeDmUser;
+        if (updatedDmUser && updatedDmUser.username.toLowerCase() === username.toLowerCase()) {
+          updatedDmUser = { ...updatedDmUser, status };
+        }
+
+        return {
+          friends: updatedFriends,
+          serverMembers: updatedMembers,
+          activeDmUser: updatedDmUser
+        };
+      });
+    });
+
     set({ socket });
   },
 

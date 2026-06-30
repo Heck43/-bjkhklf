@@ -292,7 +292,13 @@ body {
 }
 
 .status-dot.online { background-color: var(--discord-green); }
-.status-dot.idle { background-color: var(--discord-yellow); }
+.status-dot.idle {
+  background-color: transparent !important;
+  box-shadow: -2.5px 2.5px 0 0 var(--discord-yellow) !important;
+  border-radius: 50% !important;
+  border-color: transparent !important;
+  transform: rotate(-45deg);
+}
 .status-dot.dnd { background-color: var(--discord-red); }
 .status-dot.offline { background-color: var(--discord-offline); }
 

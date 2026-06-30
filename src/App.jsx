@@ -140,7 +140,7 @@ function MemberBar({ style }) {
 // обертка для синхронизации роутов с Zustand стором~~
 function MainLayout() {
   const { serverId, channelId } = useParams();
-  const { setNavigation, friends, servers, isAuthenticated, fetchInitialData, activeCall, userProfile, showSettings, setShowSettings } = useStore();
+  const { setNavigation, friends, servers, isAuthenticated, fetchInitialData, activeCall, userProfile, showSettings, setShowSettings, socket } = useStore();
   const navigate = useNavigate();
 
   // стейты и рефы для изменения ширины колонок~~ ня! 🐾
@@ -241,6 +241,48 @@ function MainLayout() {
       setShowServers(false);
     }
   }, [serverId, channelId, friends, servers, setNavigation, navigate]);
+
+  // Отслеживание активности пользователя для статуса idle (желтый месяц)~~
+  useEffect(() => {
+    if (!socket || !isAuthenticated) return;
+
+    let idleTimer;
+    let isIdle = false;
+
+    const setIdle = () => {
+      isIdle = true;
+      socket.emit('status_change', { status: 'idle' });
+    };
+
+    const resetTimer = () => {
+      if (isIdle) {
+        isIdle = false;
+        socket.emit('status_change', { status: 'online' });
+      }
+      
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(setIdle, 180000); // 3 минуты неактивности = idle, ня~~
+    };
+
+    // Слушаем движения мыши, клики, клавиши~~
+    window.addEventListener('mousemove', resetTimer);
+    window.addEventListener('keydown', resetTimer);
+    window.addEventListener('mousedown', resetTimer);
+    window.addEventListener('scroll', resetTimer);
+    window.addEventListener('touchstart', resetTimer);
+
+    // Запускаем таймер изначально
+    resetTimer();
+
+    return () => {
+      clearTimeout(idleTimer);
+      window.removeEventListener('mousemove', resetTimer);
+      window.removeEventListener('keydown', resetTimer);
+      window.removeEventListener('mousedown', resetTimer);
+      window.removeEventListener('scroll', resetTimer);
+      window.removeEventListener('touchstart', resetTimer);
+    };
+  }, [socket, isAuthenticated]);
 
   const isHome = serverId === '@me' || !serverId;
   const isFriends = isHome && (!channelId || channelId === 'friends');

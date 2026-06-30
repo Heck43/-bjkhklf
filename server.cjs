@@ -886,6 +886,9 @@ io.use((socket, next) => {
 // Хранилище участников голосовых каналов~~
 const voiceStates = {}; // { channelId: [ { username, socketId, avatarColor } ] }
 
+// Хранилище статусов активности пользователей (online | idle | offline)~~
+const userStatuses = {};
+
 const leaveVoice = (socket) => {
   for (const channelId in voiceStates) {
     const list = voiceStates[channelId];
@@ -906,10 +909,15 @@ const leaveVoice = (socket) => {
 
 io.on('connection', (socket) => {
   const username = socket.user.username;
+  const usernameLower = username.toLowerCase();
+
+  // Пользователь вошел в сеть~~
+  userStatuses[usernameLower] = 'online';
+  io.emit('user_status_update', { username, status: 'online' });
   console.log(`сокет подключился: @${username} (id: ${socket.id})~~ 🌸`);
 
   // Заходим в комнату имени пользователя для ЛС и личных обновлений~~
-  socket.join(`user_${username.toLowerCase()}`);
+  socket.join(`user_${usernameLower}`);
 
   // Когда пользователь переходит в текстовый канал или ЛС чат~~
   socket.on('join_channel', (channelId) => {
@@ -1017,8 +1025,26 @@ io.on('connection', (socket) => {
     });
   });
 
+  // Изменение статуса активности (online / idle)~~
+  socket.on('status_change', (data) => {
+    const { status } = data;
+    if (status === 'online' || status === 'idle') {
+      userStatuses[usernameLower] = status;
+      io.emit('user_status_update', { username, status });
+    }
+  });
+
   socket.on('disconnect', () => {
     leaveVoice(socket);
+    
+    // Проверяем, остались ли другие подключенные сокеты для этого юзера (например, в других вкладках)~~
+    const userRoom = io.sockets.adapter.rooms.get(`user_${usernameLower}`);
+    const isStillConnected = userRoom && userRoom.size > 0;
+    
+    if (!isStillConnected) {
+      userStatuses[usernameLower] = 'offline';
+      io.emit('user_status_update', { username, status: 'offline' });
+    }
     console.log(`сокет отключился: @${username} (id: ${socket.id})~~ 💾`);
   });
 });
@@ -1145,10 +1171,11 @@ app.get('/api/servers/:serverId/members', authenticateToken, async (req, res) =>
     const { serverId } = req.params;
     const members = await db.getServerMembers(serverId);
     const enriched = members.map(m => {
-      const isOnline = io.sockets.adapter.rooms.has(`user_${m.username.toLowerCase()}`);
+      const uName = m.username.toLowerCase();
+      const status = userStatuses[uName] || 'offline';
       return {
         ...m,
-        status: isOnline ? 'online' : 'offline'
+        status: status
       };
     });
     res.json(enriched);
@@ -1590,7 +1617,15 @@ app.delete('/api/messages/:id/reactions', authenticateToken, async (req, res) =>
 app.get('/api/friends', authenticateToken, async (req, res) => {
   try {
     const rows = await db.getFriends(req.user.id);
-    res.json(rows);
+    const enriched = rows.map(f => {
+      const uName = f.friend_username.toLowerCase();
+      const status = userStatuses[uName] || 'offline';
+      return {
+        ...f,
+        status: status
+      };
+    });
+    res.json(enriched);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
