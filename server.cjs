@@ -1411,15 +1411,7 @@ app.get('/api/messages/:channelId', authenticateToken, async (req, res) => {
     const limit = parseInt(req.query.limit) || 50;
     const beforeId = req.query.before ? parseInt(req.query.before) : null;
     const rows = await db.getMessages(req.params.channelId, limit, beforeId);
-    
-    // Генерируем уникальный ключ шифрования для этого чата на базе мастер-ключа сервера, ня~~
-    const crypto = require('crypto');
-    const chatKey = crypto.createHmac('sha256', JWT_SECRET).update(req.params.channelId).digest('hex');
-    
-    res.json({
-      messages: rows,
-      chatKey: chatKey
-    });
+    res.json(rows);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

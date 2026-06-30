@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import { io } from 'socket.io-client';
 import { playMessageSound, playMentionSound, playJoinSound, playLeaveSound } from '../utils/sounds.js';
-import { encryptText, decryptText } from '../utils/crypto.js';
 
 // привеееет, это наш стор на Zustand, подключенный к реальной БД sqlite3!
 // теперь все данные сохраняются на сервере и доступны в сети на Railway.com~~ мяу! 🐾
@@ -67,7 +66,6 @@ export const useStore = create((set, get) => ({
   adminStats: null,
   voiceStates: {}, // { channelId: [participants] }
   typingUsers: {}, // { [channelId]: { [username]: displayName } }
-  chatKeys: {}, // { [channelId]: chatKey } (ключи для клиентского шифрования)~~
   
   // настройки~~
   settingsOpen: false,
@@ -157,23 +155,11 @@ export const useStore = create((set, get) => ({
       }
     });
 
-    socket.on('message', async (data) => {
+    socket.on('message', (data) => {
       const { channelId, message } = data;
       const currentUser = get().userProfile;
       const activeCh = get().activeChannelId;
       const dmUser = get().activeDmUser;
-
-      // Получаем ключ для этого чата, расшифровываем сообщение~~
-      const chatKey = get().chatKeys[channelId];
-      let content = message.content;
-      if (chatKey) {
-        content = await decryptText(message.content, chatKey);
-      }
-
-      let replyToContent = message.replyToContent;
-      if (replyToContent && chatKey) {
-        replyToContent = await decryptText(message.replyToContent, chatKey);
-      }
 
       // определяем текущий активный ключ чата для сравнения с пришедшим сообщением~~
       let currentActiveChatKey = activeCh;
@@ -191,8 +177,6 @@ export const useStore = create((set, get) => ({
             ...state.messages,
             [channelId]: [...channelMessages, {
               ...message,
-              content,
-              replyToContent,
               isOwn: message.sender === currentUser.username
             }]
           }
@@ -478,36 +462,14 @@ export const useStore = create((set, get) => ({
   fetchMessages: async (channelId, limit = 50, beforeId = null) => {
     try {
       const url = `/api/messages/${channelId}?limit=${limit}` + (beforeId ? `&before=${beforeId}` : '');
-      const resData = await apiFetch(url);
-      const rawMessages = resData.messages || [];
-      const chatKey = resData.chatKey;
+      const rows = await apiFetch(url);
 
-      if (chatKey) {
-        set((state) => ({
-          chatKeys: {
-            ...state.chatKeys,
-            [channelId]: chatKey
-          }
-        }));
-      }
-
-      // Асинхронно расшифровываем все сообщения истории в памяти~~
-      const decryptedMessages = await Promise.all(rawMessages.map(async (r) => {
-        let content = r.content;
-        if (chatKey) {
-          content = await decryptText(r.content, chatKey);
-        }
-        
-        let replyToContent = r.replyToContent;
-        if (replyToContent && chatKey) {
-          replyToContent = await decryptText(r.replyToContent, chatKey);
-        }
-
+      const formattedMessages = rows.map((r) => {
         return {
           id: r.id,
           sender: r.sender,
           displayName: r.displayName || r.sender,
-          content: content,
+          content: r.content,
           timestamp: r.timestamp,
           avatarColor: r.avatarColor,
           avatarUrl: r.avatarUrl || '',
@@ -515,12 +477,12 @@ export const useStore = create((set, get) => ({
           replyToId: r.replyToId,
           replyToSender: r.replyToSender,
           replyToDisplayName: r.replyToDisplayName,
-          replyToContent: replyToContent,
+          replyToContent: r.replyToContent,
           replyToAvatarColor: r.replyToAvatarColor,
           replyToAvatarUrl: r.replyToAvatarUrl,
           reactions: r.reactions || []
         };
-      }));
+      });
 
       set((state) => {
         const currentMsgs = state.messages[channelId] || [];
@@ -528,9 +490,9 @@ export const useStore = create((set, get) => ({
         if (beforeId) {
           // если грузим историю назад, прикрепляем новые старые сообщения вперед~~
           const existingIds = new Set(currentMsgs.map(m => m.id));
-          merged = [...decryptedMessages.filter(m => !existingIds.has(m.id)), ...currentMsgs];
+          merged = [...formattedMessages.filter(m => !existingIds.has(m.id)), ...currentMsgs];
         } else {
-          merged = decryptedMessages;
+          merged = formattedMessages;
         }
 
         return {
@@ -642,25 +604,16 @@ export const useStore = create((set, get) => ({
   sendMessage: async (channelId, content, isDm = false, replyToId = null) => {
     const user = get().userProfile;
     try {
-      const chatKey = get().chatKeys[channelId];
-      const encryptedContent = chatKey ? await encryptText(content, chatKey) : content;
-
       // 1. отправляем наше сообщение в базу на сервере~~
       const newMsg = await apiFetch('/api/messages', {
         method: 'POST',
         body: JSON.stringify({
           channelId,
-          content: encryptedContent,
+          content,
           avatarColor: user.avatarColor,
           replyToId // передаем ID сообщения, на которое отвечаем~~
         })
       });
-
-      // Дешифруем replyToContent, если он есть~~
-      let replyToContent = newMsg.replyToContent;
-      if (replyToContent && chatKey) {
-        replyToContent = await decryptText(replyToContent, chatKey);
-      }
 
       // обновляем стейт сообщений, исключая дубликаты с сокетом~~
       set((state) => {
@@ -672,8 +625,6 @@ export const useStore = create((set, get) => ({
             ...state.messages,
             [channelId]: [...channelMessages, { 
               ...newMsg, 
-              content, // Сохраняем расшифрованный исходный текст сообщения, ня~~
-              replyToContent,
               isOwn: true 
             }]
           }
