@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from '../store/useStore';
 import { useNavigate } from 'react-router-dom';
 import { Hash, Search, Send, User, Paperclip, Smile, CornerUpLeft, Pencil, X } from 'lucide-react';
+import { getBackendUrl } from '../utils/url.js';
 
 // компонент для виджета приглашений на приватные серверы~~ мяу! 🐾
 function ServerInviteCard({ serverId }) {
@@ -444,7 +445,7 @@ export default function ChatArea() {
     if (isImageFile(content)) {
       return (
         <img 
-          src={content} 
+          src={getBackendUrl(content)} 
           alt="chat-attachment" 
           className="message-image"
           onClick={() => setLightboxMedia({ type: 'image', url: content })}
@@ -469,7 +470,7 @@ export default function ChatArea() {
       return (
         <div style={{ position: 'relative', display: 'flex', flexDirection: 'column' }}>
           <video 
-            src={content} 
+            src={getBackendUrl(content)} 
             controls 
             playsInline
             className="message-video"
@@ -566,7 +567,7 @@ export default function ChatArea() {
             <div className="avatar-container" style={{ width: 28, height: 28, marginRight: 8, position: 'relative' }}>
               {activeDmUser?.avatarUrl ? (
                 <img 
-                  src={activeDmUser.avatarUrl} 
+                  src={getBackendUrl(activeDmUser.avatarUrl)} 
                   alt={activeDmUser.username} 
                   style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} 
                 />
@@ -696,7 +697,7 @@ export default function ChatArea() {
                     style={{ backgroundColor: msg.replyToAvatarColor || '#ff8da1' }}
                   >
                     {msg.replyToAvatarUrl ? (
-                      <img src={msg.replyToAvatarUrl} alt={msg.replyToSender} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                      <img src={getBackendUrl(msg.replyToAvatarUrl)} alt={msg.replyToSender} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
                     ) : (
                       (msg.replyToDisplayName || msg.replyToSender || '??').substring(0, 1)
                     )}
@@ -720,7 +721,7 @@ export default function ChatArea() {
                   onClick={() => viewUserProfile(msg.sender)}
                 >
                   {msg.avatarUrl ? (
-                    <img src={msg.avatarUrl} alt={msg.sender} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                    <img src={getBackendUrl(msg.avatarUrl)} alt={msg.sender} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
                   ) : (
                     msg.sender.substring(0, 2)
                   )}
@@ -868,7 +869,7 @@ export default function ChatArea() {
           >
             {lightboxMedia.type === 'image' ? (
               <img 
-                src={lightboxMedia.url} 
+                src={getBackendUrl(lightboxMedia.url)} 
                 alt="lightbox" 
                 style={{
                   maxWidth: '100%',
@@ -880,7 +881,7 @@ export default function ChatArea() {
               />
             ) : (
               <video 
-                src={lightboxMedia.url} 
+                src={getBackendUrl(lightboxMedia.url)} 
                 controls 
                 autoPlay
                 playsInline

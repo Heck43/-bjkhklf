@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useStore } from '../store/useStore';
 import { PhoneOff, Video, VideoOff, Monitor, MonitorOff, Mic, MicOff, Headphones, Wifi } from 'lucide-react';
+import { getBackendUrl } from '../utils/url.js';
 
 // оййй~~ тут наш красивый генератор трансляции экрана для тех, кто смотрит стримчик другого котика~~
 // рисуем футуристичные летающие частички и звуковые волны на канвасе, ня! 🌸
@@ -290,7 +291,7 @@ export default function VoiceCall() {
                   >
                     <div style={{ width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       {p.avatarUrl ? (
-                        <img src={p.avatarUrl} alt={p.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <img src={getBackendUrl(p.avatarUrl)} alt={p.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       ) : (
                         p.username.substring(0, 2)
                       )}
@@ -378,7 +379,7 @@ export default function VoiceCall() {
                   >
                     <div style={{ width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       {p.avatarUrl ? (
-                        <img src={p.avatarUrl} alt={p.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <img src={getBackendUrl(p.avatarUrl)} alt={p.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       ) : (
                         p.username.substring(0, 2)
                       )}

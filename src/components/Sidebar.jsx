@@ -3,6 +3,7 @@ import { useStore } from '../store/useStore';
 import { useNavigate } from 'react-router-dom';
 import { Mic, MicOff, Headphones, Settings, Hash, Volume2, Users, Plus, X, UserPlus, PhoneOff } from 'lucide-react';
 import ServerSettingsModal from './ServerSettingsModal';
+import { getBackendUrl } from '../utils/url.js';
 
 // ууууу~~ а это наша боковая панелька!
 // тут живут каналы и личные переписки...
@@ -155,7 +156,7 @@ export default function Sidebar({ style, onChannelSelect }) {
                 >
                   <div className="avatar-container" style={{ width: 20, height: 20 }}>
                     {friend.avatarUrl ? (
-                      <img src={friend.avatarUrl} alt={friend.username} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                      <img src={getBackendUrl(friend.avatarUrl)} alt={friend.username} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
                     ) : (
                       <div className="avatar" style={{ backgroundColor: friend.avatarColor || '#72767d', fontSize: 9 }}>
                         {friend.username.substring(0, 2)}
@@ -247,7 +248,7 @@ export default function Sidebar({ style, onChannelSelect }) {
                               overflow: 'hidden'
                             }}>
                               {user.avatarUrl ? (
-                                <img src={user.avatarUrl} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                <img src={getBackendUrl(user.avatarUrl)} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                               ) : (
                                 user.username.substring(0, 2).toUpperCase()
                               )}
@@ -328,7 +329,7 @@ export default function Sidebar({ style, onChannelSelect }) {
         <div className="user-info" onClick={() => viewUserProfile(userProfile.username)} title="Мой профиль">
           <div className="avatar-container">
             {userProfile.avatarUrl ? (
-              <img src={userProfile.avatarUrl} alt="avatar" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+              <img src={getBackendUrl(userProfile.avatarUrl)} alt="avatar" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
             ) : (
               <div className="avatar" style={{ backgroundColor: userProfile.avatarColor }}>
                 {userProfile.username.substring(0, 2)}

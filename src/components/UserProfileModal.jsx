@@ -2,6 +2,7 @@ import React from 'react';
 import { useStore } from '../store/useStore';
 import { useNavigate } from 'react-router-dom';
 import { X, MessageSquare, UserPlus, Settings } from 'lucide-react';
+import { getBackendUrl } from '../utils/url.js';
 
 // привеееет~~ это карточка профиля любого пользователя!
 // она всплывает, когда мы тыкаем на аватарку или никнейм~~
@@ -78,7 +79,7 @@ export default function UserProfileModal() {
           <div className="profile-card-avatar-wrapper">
             {selectedProfileUser.avatarUrl ? (
               <img 
-                src={selectedProfileUser.avatarUrl} 
+                src={getBackendUrl(selectedProfileUser.avatarUrl)} 
                 alt={selectedProfileUser.username} 
                 className="profile-card-avatar"
               />

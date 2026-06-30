@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { X, Check, Volume2, Mic, MicOff, Headphones, User, Eye, Laptop } from 'lucide-react';
+import { getBackendUrl } from '../utils/url.js';
 
 // привееет, хозяин! это переписанные полноэкранные настроечки, как в оригинальном дискорде~~
 // тут у нас валидация через Zod, выбор красивых тем, масштаб текста и даже проверка микрофона!
@@ -428,7 +429,7 @@ function AdminPanelTab() {
                   <td style={{ padding: 12 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       {u.avatarUrl ? (
-                        <img src={u.avatarUrl} alt={u.username} style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover' }} />
+                        <img src={getBackendUrl(u.avatarUrl)} alt={u.username} style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover' }} />
                       ) : (
                         <div style={{ width: 24, height: 24, borderRadius: '50%', backgroundColor: u.avatarColor || '#72767d', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 'bold', color: '#fff' }}>
                           {u.username.substring(0, 2)}
@@ -640,7 +641,7 @@ export default function UserSettings() {
                     <div className="avatar-container" style={{ width: 80, height: 80 }}>
                       {userProfile.avatarUrl ? (
                         <img 
-                          src={userProfile.avatarUrl} 
+                          src={getBackendUrl(userProfile.avatarUrl)} 
                           alt="avatar" 
                           style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} 
                         />
@@ -842,7 +843,7 @@ export default function UserSettings() {
                       <div className="avatar-container" style={{ width: 44, height: 44 }}>
                         {avatarUrlValue ? (
                           <img 
-                            src={avatarUrlValue} 
+                            src={getBackendUrl(avatarUrlValue)} 
                             alt="preview avatar" 
                             style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} 
                           />

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useStore } from '../store/useStore';
 import { useNavigate } from 'react-router-dom';
 import { MessageSquare, UserMinus, UserCheck, Check, X, Search, Users } from 'lucide-react';
+import { getBackendUrl } from '../utils/url.js';
 
 // мяууу~~ тут мы управляем нашими пушистыми друзьями!
 // фильтры, сортировка и добавление новых друзей, ууу~~ 🐾
@@ -134,7 +135,7 @@ export default function FriendsList() {
                     <div className="friend-info-left" style={{ cursor: 'pointer' }} onClick={() => viewUserProfile(friend.username)}>
                       <div className="avatar-container" style={{ width: 36, height: 36 }}>
                         {friend.avatarUrl ? (
-                          <img src={friend.avatarUrl} alt={friend.username} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                          <img src={getBackendUrl(friend.avatarUrl)} alt={friend.username} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
                         ) : (
                           <div className="avatar" style={{ backgroundColor: friend.avatarColor || '#72767d', fontSize: 14 }}>
                             {friend.username.substring(0, 2)}

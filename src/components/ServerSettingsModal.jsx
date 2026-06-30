@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import { X } from 'lucide-react';
+import { getBackendUrl } from '../utils/url.js';
 
 // оййй~~ тут мы настраиваем наш любимый сервачок!
 // меняем аватарки, роли раздаем друзьям... мррр! 🐾
@@ -178,7 +179,7 @@ export default function ServerSettingsModal({ server, onClose }) {
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                         <div style={{ width: 32, height: 32, borderRadius: '50%', backgroundColor: member.avatarColor || '#72767d', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
                           {member.avatarUrl ? (
-                            <img src={member.avatarUrl} alt={member.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            <img src={getBackendUrl(member.avatarUrl)} alt={member.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                           ) : (
                             <span style={{ fontSize: 12, color: '#fff' }}>{member.username.substring(0,2)}</span>
                           )}

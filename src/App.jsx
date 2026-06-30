@@ -10,6 +10,7 @@ import VoiceCallManager from './components/VoiceCallManager';
 import UserSettings from './components/UserSettings';
 import UserProfileModal from './components/UserProfileModal';
 import Auth from './pages/Auth';
+import { getBackendUrl } from './utils/url.js';
 
 // мяууу~~ вот наш главный компонент приложения!
 // тут собираются все панельки вместе, настраивается роутинг и синхронизация с URL! 🐾
@@ -67,7 +68,7 @@ function MemberBar({ style }) {
         <div className="member-item" style={{ cursor: 'pointer' }} onClick={() => viewUserProfile(userProfile.username)}>
           <div className="avatar-container" style={{ width: 32, height: 32 }}>
             {userProfile.avatarUrl ? (
-              <img src={userProfile.avatarUrl} alt="avatar" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+              <img src={getBackendUrl(userProfile.avatarUrl)} alt="avatar" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
             ) : (
               <div className="avatar" style={{ backgroundColor: userProfile.avatarColor }}>
                 {userProfile.username.substring(0, 2)}
@@ -89,7 +90,7 @@ function MemberBar({ style }) {
           <div key={m.id} className="member-item" style={{ cursor: 'pointer' }} onClick={() => viewUserProfile(m.username)}>
             <div className="avatar-container" style={{ width: 32, height: 32 }}>
               {m.avatarUrl ? (
-                <img src={m.avatarUrl} alt={m.username} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                <img src={getBackendUrl(m.avatarUrl)} alt={m.username} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
               ) : (
                 <div className="avatar" style={{ backgroundColor: m.avatarColor || '#72767d' }}>
                   {m.username.substring(0, 2)}
@@ -115,7 +116,7 @@ function MemberBar({ style }) {
           <div key={m.id} className="member-item offline" style={{ cursor: 'pointer' }} onClick={() => viewUserProfile(m.username)}>
             <div className="avatar-container" style={{ width: 32, height: 32 }}>
               {m.avatarUrl ? (
-                <img src={m.avatarUrl} alt={m.username} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                <img src={getBackendUrl(m.avatarUrl)} alt={m.username} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
               ) : (
                 <div className="avatar" style={{ backgroundColor: '#72767d' }}>
                   {m.username.substring(0, 2)}
